@@ -199,7 +199,6 @@ diag_occ_train = {
 }
 
 segment_to_signal = {
-    ('M2', 'CH'): "M2",
 
     ('M8', 'M8mid'): "M8",
     ('M1', 'M8mid'): "M8",
@@ -213,8 +212,16 @@ segment_to_signal = {
     ("M2H1_mid", "M2H1_third"): "M2",
     ("M2H1_third", "H1"): "M2",
 
+    ("H2", "M6H2"): "H2",
+    ("M6", "M6H2"): "M6",
+
 }
 
+diag_to_signal = {
+    "ALB_Turn1": "M10",
+
+
+}
 
 for block, segs in segment_groups.items():
     for seg in segs:
@@ -1490,19 +1497,17 @@ def update_all_occupancy():
         rev = (seg[1], seg[0])
         if seg_occ_train.get(seg, 1) == 0:
             occupied_segments.discard(seg)
-            signal = segment_to_signal.get(seg)
-            if signal == None:
-                signal = segment_to_signal.get(rev)
-            if signal in signals_state:
-                for colors in signals_state[signal]["lamps"]:
+            signal_segment = segment_to_signal.get(seg)
+            if signal_segment == None:
+                signal_segment = segment_to_signal.get(rev)
+            if signal_segment in signals_state:
+                for colors in signals_state[signal_segment]["lamps"]:
                     if colors == "red":
-                        signals_state[signal]["lamps"][colors]["on"] = True
+                        signals_state[signal_segment]["lamps"][colors]["on"] = True
                     elif colors == "blue":
-                        signals_state[signal]["lamps"][colors]["on"] = True
+                        signals_state[signal_segment]["lamps"][colors]["on"] = True
                     else:
-                        signals_state[signal]["lamps"][colors]["on"] = False
-
-
+                        signals_state[signal_segment]["lamps"][colors]["on"] = False
             occupied_segments.discard(rev)
             check_if_route_finished(seg, rev, diag="")
             block = segment_to_block.get(seg)
@@ -1514,6 +1519,15 @@ def update_all_occupancy():
                 occupied_segments.discard((s[1], s[0]))
     for diag in diag_occ_train:
         if diag_occ_train.get(diag, 1) == 0:
+            signal_diag = diag_to_signal.get(diag)
+            if signal_diag in signals_state:
+                for colors in signals_state[signal_diag]["lamps"]:
+                    if colors == "red":
+                        signals_state[signal_diag]["lamps"][colors]["on"] = True
+                    elif colors == "blue":
+                        signals_state[signal_diag]["lamps"][colors]["on"] = True
+                    else:
+                        signals_state[signal_diag]["lamps"][colors]["on"] = False
             occupied_diagonals.discard(diag)
             check_if_route_finished(seg="", rev="", diag=diag)
     for (a, b), seg_id in segment_ids.items():

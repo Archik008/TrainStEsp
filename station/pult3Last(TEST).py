@@ -200,11 +200,18 @@ diag_occ_train = {
 
 segment_to_signal = {
     ('M2', 'CH'): "M2",
+
     ('M8', 'M8mid'): "M8",
     ('M1', 'M8mid'): "M8",
+
     ("M8", "H1"): "H1",
     ("pastM1", "M1"): "M1",
+
     ("M10", "H3"): "H3",
+
+    ("M2", "M2H1_mid"): "M2",
+    ("M2H1_mid", "M2H1_third"): "M2",
+    ("M2H1_third", "H1"): "M2",
 
 }
 
@@ -771,8 +778,7 @@ def recalc_signals_from_active_routes() -> None:
             continue
 
         for name in cfg:
-            if signals_state[name].get("manual"):
-                continue
+
             if name in signals_state:
                 for lamp in signals_state[name]["lamps"].values():
                     lamp["on"] = False
@@ -1479,8 +1485,7 @@ for split_name in split_parts_map:
 
 
 def update_all_occupancy():
-    for sig in signals_state.values():
-        sig["manual"] = False
+
     for seg in seg_occ_train:
         rev = (seg[1], seg[0])
         if seg_occ_train.get(seg, 1) == 0:
@@ -1488,14 +1493,14 @@ def update_all_occupancy():
             signal = segment_to_signal.get(seg)
             if signal == None:
                 signal = segment_to_signal.get(rev)
-            signals_state[signal]["manual"] = True
-            for colors in signals_state[signal]["lamps"]:
-                if colors == "red":
-                    signals_state[signal]["lamps"][colors]["on"] = True
-                elif colors == "blue":
-                    signals_state[signal]["lamps"][colors]["on"] = True
-                else:
-                    signals_state[signal]["lamps"][colors]["on"] = False
+            if signal in signals_state:
+                for colors in signals_state[signal]["lamps"]:
+                    if colors == "red":
+                        signals_state[signal]["lamps"][colors]["on"] = True
+                    elif colors == "blue":
+                        signals_state[signal]["lamps"][colors]["on"] = True
+                    else:
+                        signals_state[signal]["lamps"][colors]["on"] = False
 
 
             occupied_segments.discard(rev)
@@ -1770,17 +1775,7 @@ def release_route(route_id):
         if step["type"] == "segment":
             a, b = step["id"]
             paint_segment((a,b), "black")
-            """
-            signal = segment_to_signal.get((a,b))
-            if signal == None:
-                signal = segment_to_signal.get((b,a))
-                if signal == None:
-                    pass
-                else:
-                    signals_state[signal]["manual"] = False
-            else:
-                signals_state[signal]["manual"] = False
-            """
+
             occupied_segments.discard((a,b))
             occupied_segments.discard((b, a))
         elif step["type"] == "diag":

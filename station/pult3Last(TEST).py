@@ -679,97 +679,72 @@ def debug_print_frame(regs: list[int]) -> None:
 # --- Карта: какой маршрут -> какие аспекты на каких светофорах
 # Ключ: (start_node, end_node) как в routes/train_routes (или в active_routes["start"/"end"])
 ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
-    ("M2", "H3"): {
-         "M2": {
-            "lamps": {
-                "white": {"on": True, "blink": False},
-
-            }
-        },
-        "H3": {
-            "lamps": { "yellow": {"on": True, "blink": False}, "red":    {"on": False, "blink": False}, "green": {"on": True, "blink": False},
-            }
-        },
+    ("M2", "H3"): { "M2": { "lamps": { "white": {"on": True, "blink": False}, } },
+                    "H3": { "lamps": { "yellow": {"on": True, "blink": False}, "red":    {"on": False, "blink": False}, "green": {"on": True, "blink": False}, } },
     },
-    ("M2", "M10"): {
-        "M2": {
-            "lamps": { "white": {"on": True, "blink": False},
-
-            }
-        },
-        "H3": {
-            "lamps": { "green": {"on": True, "blink": False},
-            }
-        },
-
+    ("M2", "M10"): { "M2": {"lamps": { "white": {"on": True, "blink": False},} },
+                    "H3": { "lamps": { "green": {"on": True, "blink": False}, } },
     },
     ("M2", "H1"):{
-        "M2": {"aspect": "white", "blink": False},
-        "H1": {"aspect": "red", "blink": False},
+        "M2": {"lamps": { "white": {"on": True, "blink": False}, } },
     },
+    
     ("CH", "1"): {
-         "CH": {
-            "lamps": { "yellow1": {"on": True, "blink": False},}
-        },
-        "M2": {
-            "lamps": { "white": {"on": True, "blink": False},}
-        },
-        "H1": {
-            "lamps": { "green": {"on": True, "blink": False},}
-        },
+         "CH": { "lamps": { "yellow1": {"on": True, "blink": False},} },
+        "H1": { "lamps": { "green": {"on": True, "blink": False},} },
     },
-    ("CH", "2"): {
-         "CH": {
-            "lamps": { "yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False},}
-        },
-        "M2": {
-            "lamps": { "white": {"on": True, "blink": False},}
-        },
-        "H2": {
-            "lamps": { "green": {"on": True, "blink": False}, }
-        },
+    ("CH", "2"): { "CH": { "lamps": { "yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False},} },
+                    "H2": {"lamps": { "green": {"on": True, "blink": False}, } },
     },
-    ("M8", "M1"): {
-         "M8": {
-            "lamps": {
-                "white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},}
-        },
-        "M1": {
-            "lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},}
-        }
+    ("M8", "M1"): { "M8": { "lamps": { "white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},} },
+                    "M1": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},} }
     },
+    
 
 }
 
-
-
-def recalc_signals_from_active_routes() -> None:
-    """
-    1) Сначала всё закрываем в STOP (red/blue/off — что доступно данному светофору)
-    2) Потом применяем все активные маршруты из active_routes через ROUTE_SIGNAL_MAP
-       (если маршрут найден в обратную сторону — тоже применим)
-    """
-    # 1) базово всё закрыть
-
+def recalc_signals_to_red(rid) -> None:
     AdditionalSignals = ["ALB_Sect1-2", "ALB_Sect1-2_2", "ALB_Sect2"]
     # включаем красный по умолчанию
-    for name in signals_state.keys():
+    if rid != None:
+        data = active_routes.get(rid)
+        a = data.get("start")
+        b = data.get("end")
+        key = (a, b)
+        if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
+            key = (b, a)
+        cfg = ROUTE_SIGNAL_MAP.get(key)
+        for name in cfg:
+            if name in AdditionalSignals:
+                continue
+            for lamp in signals_state[name]["lamps"].values():
+                lamp["on"] = False
+                lamp["blink"] = False
+            if "red" in signals_state[name]["lamps"]:
+                signals_state[name]["lamps"]["red"]["on"] = True
+            elif "blue" in signals_state[name]["lamps"]:
+                signals_state[name]["lamps"]["blue"]["on"] = True
+            else:
+                for colors in signals_state[name]["lamps"]:
+                    signals_state[name]["lamps"][colors]["on"] = False
+    else:
+        for name in signals_state.keys():
+            if name in AdditionalSignals:
+                continue
+            for lamp in signals_state[name]["lamps"].values():
+                lamp["on"] = False
+                lamp["blink"] = False
+            if "red" in signals_state[name]["lamps"]:
+                signals_state[name]["lamps"]["red"]["on"] = True
+            elif "blue" in signals_state[name]["lamps"]:
+                signals_state[name]["lamps"]["blue"]["on"] = True
+            else:
+                for colors in signals_state[name]["lamps"]:
+                    signals_state[name]["lamps"][colors]["on"] = False
 
-        if name in AdditionalSignals:
-            continue
-        for lamp in signals_state[name]["lamps"].values():
-            lamp["on"] = False
-            lamp["blink"] = False
-        if "red" in signals_state[name]["lamps"]:
-            signals_state[name]["lamps"]["red"]["on"] = True
-        elif "blue" in signals_state[name]["lamps"]:
-            signals_state[name]["lamps"]["blue"]["on"] = True
-        else:
-            for colors in signals_state[name]["lamps"]:
-                signals_state[name]["lamps"][colors]["on"] = False
+def recalc_signals_from_active_routes() -> None:
 
-
-    # 2) применить активные маршруты
+       # 2) применить активные маршруты
     for rid, data in active_routes.items():
         a = data.get("start")
         b = data.get("end")
@@ -818,7 +793,6 @@ def update_signals_visual_v2() -> None:
         ids = signal_ids[name]
         cfg_colors = signals_config[name]["colors"]
 
-
         st = signals_state.get(name, {"aspect": "off", "blink": False})
         aspect = st.get("aspect", "off")
         blink_all = bool(st.get("blink", False))
@@ -852,7 +826,8 @@ def update_signals_visual_v2() -> None:
 
     root.after(350, update_signals_visual_v2)
 
-
+button666 = tkinter.Button(root, text="recalc", command=recalc_signals_from_active_routes)
+button666.place(x=10, y=10)
 
 #########################################        МАРШРУТЫ                ##############################################
 # ВАЖНО: id сегмента – кортеж, как в segment_ids
@@ -1795,6 +1770,7 @@ def release_route(route_id):
         elif step["type"] == "diag":
             paint_diagonal(step["name"], "black")
             occupied_diagonals.discard(step["name"])
+    recalc_signals_to_red(route_id)
     del active_routes[route_id]
 
     comboboxDelete(route_id)
@@ -2748,5 +2724,5 @@ poll_arduino()
 # init_signal_roles()
 # update_signals_visual()
 update_signals_visual_v2()  # новое (все сигналы)
-recalc_signals_from_active_routes()
+recalc_signals_to_red(None)
 root.mainloop()

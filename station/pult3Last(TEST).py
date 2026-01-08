@@ -183,7 +183,7 @@ seg_occ_train = {
     ("M2", "CH"): 1,
     ("past2", "H2"): 1,
     ("M2", "M2H1_mid"): 1,
-    ("M2H1_mid", "H1"): 1,
+    ("M2H1_mid", "M2H1_third"): 1,
     ("H2", "M6H2"): 1,
     ("M6H2", "M6"): 1,
     ("M10", "H3"): 1,
@@ -196,6 +196,16 @@ diag_occ_train = {
     "ALB_Turn8": 1,
     "ALB_Turn4": 1,
     "ALB_Turn6": 1,
+}
+
+segment_to_signal = {
+    ('M2', 'CH'): "M2",
+    ('M8', 'M8mid'): "M8",
+    ('M1', 'M8mid'): "M8",
+    ("M8", "H1"): "H1",
+    ("pastM1", "M1"): "M1",
+    ("M10", "H3"): "H3",
+
 }
 
 
@@ -237,7 +247,7 @@ signals_config = {
         "mount": "bottom",
         "pack_side": "right",
         "count": 5,
-        "colors": ["white", "yellow", "red", "green", "yellow"],
+        "colors": ["white", "yellow", "red", "green", "yellow1"],
     },
     "M2": {
         "mount": "bottom",
@@ -444,23 +454,26 @@ signals_state = {
             "yellow": {"on": False, "blink": False},
             "green": {"on": False, "blink": False},
             "red": {"on": True, "blink": False},
-            "yellow": {"on": False, "blink": False},
+            "yellow1": {"on": False, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "M2": {
             "lamps": {
                 "blue": {"on": True, "blink": False},
                 "white": {"on": False, "blink": False},
-            }
+        },
+        "manual": False,
     },
     "H1": {
-            "lamps": {
-                "yellow": {"on": False, "blink": False},
-                "green": {"on": False, "blink": False},
-                "red": {"on": True, "blink": False},
-                "white": {"on": False, "blink": False},
-            }
+        "lamps": {
+            "yellow": {"on": False, "blink": False},
+            "green": {"on": False, "blink": False},
+            "red": {"on": True, "blink": False},
+            "white": {"on": False, "blink": False},
+        },
+        "manual": False,
     },
     "H2": {
         "lamps": {
@@ -468,7 +481,8 @@ signals_state = {
             "green": {"on": False, "blink": False},
             "red": {"on": True, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "H3": {
         "lamps": {
@@ -476,54 +490,61 @@ signals_state = {
             "green": {"on": False, "blink": False},
             "red": {"on": True, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
      "H4": {
-            "lamps": {
-                "yellow": {"on": False, "blink": False},
-                "green": {"on": False, "blink": False},
-                "red": {"on": True, "blink": False},
-                "white": {"on": False, "blink": False},
-            }
+        "lamps": {
+            "yellow": {"on": False, "blink": False},
+            "green": {"on": False, "blink": False},
+            "red": {"on": True, "blink": False},
+            "white": {"on": False, "blink": False},
+        },
+        "manual": False,
     },
-
     "M6": {
         "lamps": {
             "red": {"on": True, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "M8": {
         "lamps": {
             "red": {"on": True, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "M10": {
         "lamps": {
             "red": {"on": True, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "M1": {
         "lamps": {
             "red": {"on": True, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "ALB_Sect1-2": {
         "lamps": {
             "red": {"on": False, "blink": False},
             "green": {"on": False, "blink": False},
             "yellow": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "ALB_Sect1-2_2": {
         "lamps": {
             "red": {"on": False, "blink": False},
             "green": {"on": False, "blink": False},
             "yellow": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
     "ALB_Sect2": {
         "lamps": {
@@ -532,20 +553,12 @@ signals_state = {
             "red": {"on": False, "blink": False},
             "black": {"on": False, "blink": False},
             "white": {"on": False, "blink": False},
-        }
+        },
+        "manual": False,
     },
 
 }
 
-# 4) ТЕСТ (можно оставить, можно закомментить)
-def debug_check_ch_patterns():
-    tests = ["red", "green", "white", "one_yellow", "two_yellow", "off", "invite"]
-    for a in tests:
-        b = encode_signal_byte(signal_defs["CH"], a, blink=False, blink_phase=True)
-        print(f"CH {a:>10} -> {b:08b}")
-
-# ВКЛЮЧИ, если хочешь печать теста при старте:
-# debug_check_ch_patterns()
 
 #########################################        SIGNALS V2 (GUI + MAP)           ##############################################
 # Этот блок:
@@ -558,7 +571,7 @@ SIGNAL_OFF_COLOR = "#202020"
 signal_blink_phase = False
 
 # включи True, если хочешь видеть печать "какой байт на какой сигнал"
-DEBUG_SIGNALS_FRAME = True
+DEBUG_SIGNALS_FRAME = False
 
 
 def _indices_for_color(sig_name: str, color: str) -> list[int]:
@@ -660,31 +673,57 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
             }
         },
         "H3": {
-            "lamps": {
-                "yellow": {"on": True, "blink": False},
-                "red":    {"on": False, "blink": False},
-                "green": {"on": True, "blink": False},
+            "lamps": { "yellow": {"on": True, "blink": False}, "red":    {"on": False, "blink": False}, "green": {"on": True, "blink": False},
             }
         },
     },
     ("M2", "M10"): {
         "M2": {
-            "lamps":
-                {"blue": {"on": True, "blink": False},
-            },
-        },
-
-        "M10": {
-            "lamps": {
-                "white": {"on": True, "blink": False},
+            "lamps": { "white": {"on": True, "blink": False},
 
             }
         },
+        "H3": {
+            "lamps": { "green": {"on": True, "blink": False},
+            }
+        },
+
     },
     ("M2", "H1"):{
         "M2": {"aspect": "white", "blink": False},
         "H1": {"aspect": "red", "blink": False},
-    }
+    },
+    ("CH", "1"): {
+         "CH": {
+            "lamps": { "yellow1": {"on": True, "blink": False},}
+        },
+        "M2": {
+            "lamps": { "white": {"on": True, "blink": False},}
+        },
+        "H1": {
+            "lamps": { "green": {"on": True, "blink": False},}
+        },
+    },
+    ("CH", "2"): {
+         "CH": {
+            "lamps": { "yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False},}
+        },
+        "M2": {
+            "lamps": { "white": {"on": True, "blink": False},}
+        },
+        "H2": {
+            "lamps": { "green": {"on": True, "blink": False}, }
+        },
+    },
+    ("M8", "M1"): {
+         "M8": {
+            "lamps": {
+                "white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},}
+        },
+        "M1": {
+            "lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},}
+        }
+    },
 
 }
 
@@ -697,25 +736,11 @@ def recalc_signals_from_active_routes() -> None:
        (если маршрут найден в обратную сторону — тоже применим)
     """
     # 1) базово всё закрыть
-    """
-    for name in signals_config.keys():
-        # если у тебя есть signal_defs/stop_aspect_for_signal — используем их
-        try:
-            signals_state[name]["aspect"] = stop_aspect_for_signal(signal_defs[name])  # type: ignore[name-defined]
-        except Exception:
-            # запасной вариант без signal_defs
-            cols = signals_config[name]["colors"]
-            if "red" in cols:
-                signals_state[name]["lamps"]["red"]["on"] = True
-            elif "blue" in cols:
-                signals_state[name]["lamps"]["blue"]["on"] = True
-            else:
-                signals_state[name]["aspect"] = "off"
-        signals_state[name]["blink"] = False
-    """
+
     AdditionalSignals = ["ALB_Sect1-2", "ALB_Sect1-2_2", "ALB_Sect2"]
     # включаем красный по умолчанию
     for name in signals_state.keys():
+
         if name in AdditionalSignals:
             continue
         for lamp in signals_state[name]["lamps"].values():
@@ -746,6 +771,8 @@ def recalc_signals_from_active_routes() -> None:
             continue
 
         for name in cfg:
+            if signals_state[name].get("manual"):
+                continue
             if name in signals_state:
                 for lamp in signals_state[name]["lamps"].values():
                     lamp["on"] = False
@@ -760,9 +787,6 @@ def recalc_signals_from_active_routes() -> None:
 
 def update_signals_visual_v2() -> None:
     global signal_blink_phase
-
-    # 1) пересчитать сигналы от активных маршрутов
-    recalc_signals_from_active_routes()
 
     # 2) (опционально) собрать байты в порядке signals_config — для отладки/будущей отправки в Arduino
     try:
@@ -803,10 +827,17 @@ def update_signals_visual_v2() -> None:
                 fill = SIGNAL_OFF_COLOR
 
             canvas.itemconfig(oid, fill=fill)
-        
-    signal_blink_phase = not signal_blink_phase
 
-    root.after(500, update_signals_visual_v2)
+    signal_blink_phase = not signal_blink_phase
+    if signals_state["CH"]["lamps"]["red"]["on"] == True:
+        signals_state["ALB_Sect1-2_2"]["lamps"]["yellow"]["on"] = True
+        signals_state["ALB_Sect1-2_2"]["lamps"]["green"]["on"] = False
+    if signals_state["CH"]["lamps"]["yellow"]["on"] == True or signals_state["CH"]["lamps"]["yellow1"]["on"] == True:
+        signals_state["ALB_Sect1-2_2"]["lamps"]["yellow"]["on"] =False
+        signals_state["ALB_Sect1-2_2"]["lamps"]["green"]["on"] = True
+
+
+    root.after(350, update_signals_visual_v2)
 
 
 
@@ -1448,10 +1479,25 @@ for split_name in split_parts_map:
 
 
 def update_all_occupancy():
+    for sig in signals_state.values():
+        sig["manual"] = False
     for seg in seg_occ_train:
         rev = (seg[1], seg[0])
         if seg_occ_train.get(seg, 1) == 0:
             occupied_segments.discard(seg)
+            signal = segment_to_signal.get(seg)
+            if signal == None:
+                signal = segment_to_signal.get(rev)
+            signals_state[signal]["manual"] = True
+            for colors in signals_state[signal]["lamps"]:
+                if colors == "red":
+                    signals_state[signal]["lamps"][colors]["on"] = True
+                elif colors == "blue":
+                    signals_state[signal]["lamps"][colors]["on"] = True
+                else:
+                    signals_state[signal]["lamps"][colors]["on"] = False
+
+
             occupied_segments.discard(rev)
             check_if_route_finished(seg, rev, diag="")
             block = segment_to_block.get(seg)
@@ -1724,12 +1770,24 @@ def release_route(route_id):
         if step["type"] == "segment":
             a, b = step["id"]
             paint_segment((a,b), "black")
+            """
+            signal = segment_to_signal.get((a,b))
+            if signal == None:
+                signal = segment_to_signal.get((b,a))
+                if signal == None:
+                    pass
+                else:
+                    signals_state[signal]["manual"] = False
+            else:
+                signals_state[signal]["manual"] = False
+            """
             occupied_segments.discard((a,b))
             occupied_segments.discard((b, a))
         elif step["type"] == "diag":
             paint_diagonal(step["name"], "black")
             occupied_diagonals.discard(step["name"])
     del active_routes[route_id]
+
     comboboxDelete(route_id)
 
 #########################################        МИГАНИЕ МАРШРУТА               ##############################################
@@ -1979,6 +2037,7 @@ def on_two_nodes_selected(a, b):
         current_values = list(combobox1["values"])
         current_values.append(rid)
         combobox1["values"] = tuple(current_values)
+        recalc_signals_from_active_routes()
 
     root.after(2100, finalize)
 

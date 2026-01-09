@@ -1,21 +1,25 @@
 import tkinter
 import tkinter as tk
-import time
-from tkinter.messagebox import showinfo
 import serial
-import serial.tools.list_ports
-from serial import SerialException
+from tkinter.messagebox import showinfo
 from serial.tools import list_ports
 from tkinter import ttk
-from dataclasses import dataclass
-from typing import Dict, List, Sequence
 from configs import *
-
+from ArduinoCode import *
+import time
+from serial import SerialException
+from tkinter import messagebox
 
 root = tk.Tk()
 root.title("Станция")
 canvas = tk.Canvas(root, width=1250, height=600, bg="white")
-canvas.pack()
+
+
+def quit_function():
+    response = tkinter.messagebox.askyesno('Exit', 'Are you sure you want to exit?')
+    if response:
+        exit()
+
 
 CANVAS_W = 1200
 CANVAS_H = 600
@@ -25,6 +29,7 @@ def showInfo(title, msg):
     showinfo(title=title, message=msg)
 
 #########################################        ФУНКЦИЯ ТУПИКОВ                ##############################################
+
 def drawDeadEnd(name, direction, offset):
     x = positions[name][0]
     y = positions[name][1]
@@ -44,35 +49,22 @@ segment_ids = {}
 diag_ids = {}
 signal_ids = {}
 segment_to_block = {}
-
-
 split_diag_ids = {}
-
-
-active_routes = {}  # route_id -> {"start": a, "end": b, "segments": [...]}
-route_counter = 1   # уникальные номера маршрутов
-
+active_routes = {}
+route_counter = 1
 occupied_segments = set()
 occupied_diagonals = set()
 diagonal_modes = {}
-
-switch_text_ids = {} # name = id текста
-switch_indicator_ids = {}          # name = id прямоугольника
-
+switch_text_ids = {}
+switch_indicator_ids = {}
 blinking_diags = set()
 blinking_routes = set()
-# нормальное (плюсовое) положение стрелок
-
-
 last_switch_check = {}
-
 current_mode = "maneuver"
 btn_maneuver = None
 btn_train = None
-
 arduino = None
 arduino_status_label = None
-
 ser = None
 last_bits = None
 
@@ -104,128 +96,8 @@ for block, segs in segment_groups.items():
         segment_to_block[seg] = block
         segment_to_block[(seg[1], seg[0])] = block
 
-# ===================== СВЕТОФОРЫ: логика байтов/аспектов =====================
-
-# 1) Какие лампы должны гореть для каждого "аспекта" (сигнала)
-#    ВАЖНО: названия ламп здесь — "логические роли", а не позиции.
-#    Реальные биты вычисляются из signals_config[name]["colors"].
-ASPECT_ROLES = {
-    "off":        tuple(),
-    "red":        ("red",),
-    "green":      ("green",),
-    "white":      ("white",),
-    "blue":       ("blue",),
-    "one_yellow": ("yellow",),
-    "two_yellow": ("yellow", "yellow2"),
-    "invite":     ("red", "white"),   # белый будет мигать фазой
-}
-
-@dataclass
-class SignalDef:
-    name: str
-    lamp_to_bit: Dict[str, int]   # например {"white":7,"yellow":6,"red":5,"green":4,"yellow2":3}
-    has: set                      # быстрые проверки наличия ламп
-
-def build_signal_defs(signals_config: dict) -> Dict[str, SignalDef]:
-    """
-    По signals_config строит для каждого сигнала:
-      - lamp_to_bit: какая лампа сидит на каком бите (7..0)
-      - has: набор доступных "логических ламп" (white/red/yellow/yellow2/...)
-    Правило: i-я лампа в colors -> бит (7 - i)
-    """
-    defs: Dict[str, SignalDef] = {}
-
-    for name, cfg in signals_config.items():
-        colors: List[str] = cfg["colors"]
-
-        # если цвет повторяется (например yellow, yellow), делаем ключи yellow2, yellow3...
-        counts: Dict[str, int] = {}
-        lamp_keys: List[str] = []
-        for c in colors:
-            counts[c] = counts.get(c, 0) + 1
-            lamp_keys.append(c if counts[c] == 1 else f"{c}{counts[c]}")
-
-        lamp_to_bit: Dict[str, int] = {}
-        for i, lamp in enumerate(lamp_keys):
-            bit = 7 - i
-            lamp_to_bit[lamp] = bit
-
-        defs[name] = SignalDef(name=name, lamp_to_bit=lamp_to_bit, has=set(lamp_to_bit.keys()))
-
-    return defs
-
-def make_byte_on(lamps: Sequence[str], lamp_to_bit: Dict[str, int]) -> int:
-    """
-    Active-low: 0 = ON, 1 = OFF
-    Включить лампу = сбросить её бит в 0.
-    """
-    b = 0xFF
-    for lamp in lamps:
-        bit = lamp_to_bit.get(lamp)
-        if bit is None:
-            continue
-        b &= ~(1 << bit)
-    return b & 0xFF
-
-def stop_aspect_for_signal(sig_def: SignalDef) -> str:
-    """
-    Базовый "запрещающий" сигнал:
-      - если есть красный -> red
-      - иначе если есть синий -> blue
-      - иначе off
-    """
-    if "red" in sig_def.has:
-        return "red"
-    if "blue" in sig_def.has:
-        return "blue"
-    return "off"
-
-def encode_signal_byte(sig_def: SignalDef, aspect: str, blink: bool, blink_phase: bool) -> int:
-    """
-    Возвращает один байт (8 бит) для 74HC595 данного сигнала.
-    """
-    # неизвестный аспект => STOP
-    if aspect not in ASPECT_ROLES:
-        aspect = stop_aspect_for_signal(sig_def)
-
-    if aspect == "off":
-        return 0xFF
-
-    # invite: красный всегда + белый мигает фазой
-    if aspect == "invite":
-        lamps = ("red", "white") if blink_phase else ("red",)
-        return make_byte_on(lamps, sig_def.lamp_to_bit)
-
-    lamps = ASPECT_ROLES[aspect]
-
-    # если blink=True — мигает весь аспект: в "выключенной фазе" гасим всё
-    if blink and not blink_phase:
-        return 0xFF
-
-    return make_byte_on(lamps, sig_def.lamp_to_bit)
-
-def build_frame(signals_config: dict,
-                signal_defs: Dict[str, SignalDef],
-                signals_state: dict,
-                blink_phase: bool) -> List[int]:
-    """
-    Собирает список байтов по всем сигналам в порядке signals_config.keys().
-    Это и есть "кадр" для цепочки регистров.
-    """
-    regs: List[int] = []
-    for name in signals_config.keys():  # порядок dict = порядок цепочки
-        st = signals_state.get(name, {"aspect": "off", "blink": False})
-        sd = signal_defs[name]
-        b = encode_signal_byte(sd, st["aspect"], st.get("blink", False), blink_phase)
-        regs.append(b)
-    return regs
-
-# 2) СТРОИМ ОПИСАНИЯ СИГНАЛОВ (после того как ВСЕ def-ы выше уже объявлены)
-signal_defs = build_signal_defs(signals_config)
-
-# 3) ТЕКУЩЕЕ СОСТОЯНИЕ СИГНАЛОВ (что показывать)
+# 3) ТЕКУЩЕЕ СОСТОЯНИЕ СИГНАЛОВ
 signals_state = {
-
     "CH": {
         "lamps": {
             "yellow": {"on": False, "blink": False},
@@ -336,25 +208,13 @@ signals_state = {
 
 }
 
-
-#########################################        SIGNALS V2 (GUI + MAP)           ##############################################
-# Этот блок:
-# - рисует ВСЕ светофоры из signals_config (через signal_ids, которые создаёт drawSignal)
-# - поддерживает аспекты: off/red/green/white/blue/one_yellow/two_yellow/invite
-# - поддерживает мигание: либо всего аспекта (blink=True), либо "invite" (мигает белый)
-# - умеет пересчитывать сигналы от активных маршрутов (active_routes) через ROUTE_SIGNAL_MAP
-
 SIGNAL_OFF_COLOR = "#202020"
 signal_blink_phase = False
-
-# включи True, если хочешь видеть печать "какой байт на какой сигнал"
 DEBUG_SIGNALS_FRAME = False
-
 
 def _indices_for_color(sig_name: str, color: str) -> list[int]:
     cols = signals_config[sig_name]["colors"]
     return [i for i, c in enumerate(cols) if c == color]
-
 
 def gui_lamps_for_aspect(sig_name: str, aspect: str) -> tuple[set[int], set[int]]:
     """
@@ -431,11 +291,6 @@ def gui_lamps_from_state(sig_name: str) -> tuple[set[int], set[int]]:
 
     return lit, blink
 
-def debug_print_frame(regs: list[int]) -> None:
-    # Печать “какой байт на какой сигнал” в порядке цепочки signals_config
-    names = list(signals_config.keys())
-    line = " | ".join(f"{n}:{b:08b}" for n, b in zip(names, regs))
-    print("[FRAME]", line)
 
 def recalc_signals_to_red(rid) -> None:
     AdditionalSignals = ["ALB_Sect1-2", "ALB_Sect1-2_2", "ALB_Sect2"]
@@ -509,13 +364,14 @@ def recalc_signals_from_active_routes() -> None:
 
 
 def update_signals_visual_v2() -> None:
+
     global signal_blink_phase
 
     # 2) (опционально) собрать байты в порядке signals_config — для отладки/будущей отправки в Arduino
     try:
         regs = build_frame(signals_config, signal_defs, signals_state, blink_phase=signal_blink_phase)  # type: ignore[name-defined]
-        if DEBUG_SIGNALS_FRAME:
-            debug_print_frame(regs)
+        #if DEBUG_SIGNALS_FRAME:
+            #debug_print_frame(regs)
     except Exception:
         # если build_frame/signal_defs ещё не подключены - рисуем GUI
         pass
@@ -533,7 +389,6 @@ def update_signals_visual_v2() -> None:
         blink_all = bool(st.get("blink", False))
 
         lit, blink = gui_lamps_from_state(name)
-
         
         for idx, oid in enumerate(ids):
             is_lit = idx in lit
@@ -557,7 +412,6 @@ def update_signals_visual_v2() -> None:
     if signals_state["CH"]["lamps"]["yellow"]["on"] == True or signals_state["CH"]["lamps"]["yellow1"]["on"] == True:
         signals_state["ALB_Sect1-2_2"]["lamps"]["yellow"]["on"] =False
         signals_state["ALB_Sect1-2_2"]["lamps"]["green"]["on"] = True
-
 
     root.after(350, update_signals_visual_v2)
 
@@ -600,7 +454,6 @@ def make_signal_state(name, colors):
 #########################################       ОТРИСОВКА СВЕТОФОРОВ                ##############################################
 def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
     x, y = positions[name]
-
     r = 4
     gap = 2 * r + 2
     stand_len = 15
@@ -627,7 +480,6 @@ def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
         fill_color = ""
         if colors is not None and i < len(colors):
             fill_color = colors[i]
-
         oid = canvas.create_oval(
             cx - r, cy - r,
             cx + r, cy + r,
@@ -638,17 +490,12 @@ def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
     make_signal_state(name, colors)
     signal_ids[name] = ids
 
-
-
 #########################################        ФУНКЦИИ МАРШРУТОВ                ##############################################
-
-
 def paint_diagonal(name, color):
     if name in split_diag_ids:
         return
     for line_id in diag_ids[name]:
         canvas.itemconfig(line_id, fill=color)
-
 
 def paint_segment(key, color):
     seg_id = segment_ids.get(key)
@@ -725,7 +572,6 @@ def setBranchLeft(nameDiag, offset):
         canvas.coords(diag_ids[nameDiag][1], x1, y1 + offset, x2, y2 + offset)
         x1, y1, x2, y2 = canvas.coords(diag_ids[nameDiag][2])
         canvas.coords(diag_ids[nameDiag][2], x1, y1, x2, y2 + offset)
-
 
 def branchWidth(namediag, width):
     if namediag in split_diag_ids.keys():
@@ -865,70 +711,9 @@ def blink_switches(diags, duration_ms=2000, interval_ms=200):
             rect = switch_indicator_ids.get(d)
             if rect is not None:
                 canvas.itemconfig(rect, fill="cyan" if state else final_colors[d])
-
         root.after(interval_ms, _step, not state)
 
     _step(True)
-
-#########################################        СТРЕЛКИ/СЕРВО (ARDUINO)              ##############################################
-def send_arduino_cmd(cmd: str):
-    """
-    Отправка одиночной команды (один символ) в Arduino.
-    """
-    global ser
-    if ser is None or not ser.is_open:
-        print(f"[PY] Arduino not connected, cmd={cmd!r} пропущена")
-        return
-
-    try:
-        # шлём один байт-символ
-        ser.write(cmd.encode("ascii"))
-        print(f"[PY] SEND -> {cmd!r}")
-    except SerialException as e:
-        print(f"[PY] Ошибка отправки команды {cmd!r} в Arduino: {e}")
-
-def send_servo_for_switch(nameDiag: str, mode: str):
-    """
-    nameDiag: 'ALB_Turn1', 'ALB_Turn2-4', 'ALB_Turn6-8', 'ALB_Turn4-6'
-    mode: 'left' или 'right'
-
-    Логика:
-      left  -> ПЛЮС (первое положение)
-      right -> МИНУС (второе положение)
-    """
-
-    if mode not in ("left", "right"):
-        return
-
-    # по договору:
-    # A / a – M1M10 (ALB_Turn1)
-    # D / d – M2H3  (ALB_Turn2-4)
-    # B / b – H42   (ALB_Turn6-8)
-    # C / c – 2T1A  (первый привод 2T1)
-    # E / e – 2T1B  (второй привод 2T1)
-
-    # плюс = большая буква, минус = маленькая
-    cmds: list[str] = []
-
-    if nameDiag == "ALB_Turn1":          # M1M10
-        cmds.append('A' if mode == "left" else 'a')
-
-    elif nameDiag == "ALB_Turn2-4":      # M2H3
-        cmds.append('D' if mode == "left" else 'd')
-
-    elif nameDiag == "ALB_Turn6-8":      # H42
-        cmds.append('B' if mode == "left" else 'b')
-
-    elif nameDiag == "ALB_Turn4-6":      # 2T1: ДВА СЕРВО ОДНОВРЕМЕННО
-        # первый привод
-        cmds.append('C' if mode == "left" else 'c')
-        # второй привод
-        cmds.append('E' if mode == "left" else 'e')
-
-    # отправляем все команды по очереди
-    for c in cmds:
-        send_arduino_cmd(c)
-
 
 #########################################        СТРЕЛКИ/ДИАГОНАЛИ               ##############################################
 
@@ -966,13 +751,11 @@ AddDiagonal(965, 330, 890, 430, -22, -37, "ALB_Turn1")
 AddDiagonal(560, 130, 470, 230, -57, -20, "ALB_Turn8")
 AddSplitDiagonal(430, 230, 390, 280,350, 330, -30, -30, "ALB_Turn4-6", "ALB_Turn4", "ALB_Turn6")
 
-
 # начальное положение стрелок
 set_diagonal_mode("ALB_Turn1", "left")
 set_diagonal_mode("ALB_Turn2", "left")
 set_diagonal_mode("ALB_Turn8", "left")
 set_diagonal_mode("ALB_Turn4-6", "left")
-
 
 def check_if_route_finished(seg, rev, diag):
     for rid in list(active_routes.keys()):
@@ -999,21 +782,13 @@ def check_if_route_finished(seg, rev, diag):
                         release_route(rid)
 
 
-def set_arduino_status(connected: bool, text: str = ""):
-    if connected:
-        arduino_status_label.config(text=f"Arduino: {text}", bg="green", fg="black")
-    else:
-        arduino_status_label.config(text="Arduino: not connected", bg="red", fg="white")
-
 part_to_split = {}
 
 for split_name in split_parts_map:
     for part, logic_name in split_parts_map[split_name].items():
         part_to_split[logic_name] = (split_name, part)
 
-
 def update_all_occupancy():
-
     for seg in seg_occ_train:
         rev = (seg[1], seg[0])
         if seg_occ_train.get(seg, 1) == 0:
@@ -1075,7 +850,6 @@ def update_all_occupancy():
 
         paint_segment((a, b), "black")
 
-
     for diag_name, lines in diag_ids.items():
         if diag_occ_train.get(diag_name, 1) == 0:
             paint_diagonal(diag_name, "red")
@@ -1085,12 +859,10 @@ def update_all_occupancy():
             continue
         # 3) свободна -> чёрная
         paint_diagonal(diag_name, "black")
-
     root.after(100, update_all_occupancy)
 
 #########################################        ПОДСВЕТКА МАРШРУТОВ               ##############################################
 def highlight_possible_targets(start):
-
     possible = set()
     if current_mode == "maneuver":
         for (a, b) in routes.keys():
@@ -1335,6 +1107,7 @@ def is_segment_in_blinking_route(seg):
     return False
 
 def blink_route(start, end, duration_ms=2000, interval_ms=200):
+
     blinking_routes.add((start,end))
     end_time = time.time() + duration_ms / 1000.0
 
@@ -1371,7 +1144,6 @@ def on_node_click(event):
 
     if len(selected_nodes) == 1:
         highlight_possible_targets(name)
-
     if len(selected_nodes) == 2:
         first = selected_nodes[0]
         second = selected_nodes[1]
@@ -1379,35 +1151,36 @@ def on_node_click(event):
         on_two_nodes_selected(first, second)
 
 def blink_diag(name, duration_ms=2000, interval_ms=200):
-        blinking_diags.add(name)
-        end_time = time.time() + duration_ms / 1000.0
+    blinking_diags.add(name)
+    end_time = time.time() + duration_ms / 1000.0
 
-        def _step(state=True):
-            if time.time() >= end_time:
-                if name in split_diag_ids:
-                    for split_name in split_diag_ids.keys():
-                        for part_name, lines in split_diag_ids[split_name].items():
-                            logic_name = split_parts_map[split_name][part_name]
-                            if logic_name in diag_ids:
-                                   paint_diagonal(logic_name, "black")
-                else:
-                    paint_diagonal(name, "black")
-                return
-
-            color = "cyan" if state else "black"
+    def _step(state=True):
+        if time.time() >= end_time:
             if name in split_diag_ids:
                 for split_name in split_diag_ids.keys():
                     for part_name, lines in split_diag_ids[split_name].items():
                         logic_name = split_parts_map[split_name][part_name]
                         if logic_name in diag_ids:
-                            paint_diagonal(logic_name, color)
+                                paint_diagonal(logic_name, "black")
             else:
-                paint_diagonal(name, color)
+                paint_diagonal(name, "black")
+            return
+
+        color = "cyan" if state else "black"
+        if name in split_diag_ids:
+            for split_name in split_diag_ids.keys():
+                for part_name, lines in split_diag_ids[split_name].items():
+                    logic_name = split_parts_map[split_name][part_name]
+                    if logic_name in diag_ids:
+                        paint_diagonal(logic_name, color)
+        else:
+            paint_diagonal(name, color)
             root.after(interval_ms, _step, not state)
         _step(True)
 
 global changingSwitches
 changingSwitches = False
+
 def on_switch_mode_selected(name,mode):
     text = canvas.itemcget(switch_text_ids[name], "text")
     global settingRoute
@@ -1472,7 +1245,6 @@ def on_switch_mode_selected(name,mode):
             return
     root.after(2100, finalize)
 
-
 def on_switch_click(event):
     name = get_switch_name_from_event(event)
     menu = tk.Menu(root, tearoff=0)
@@ -1497,7 +1269,6 @@ def on_two_nodes_selected(a, b):
     global last_switch_check
     global settingRoute
 
-    # 1. Проверка конфликтов по занятым сегментам/стрелкам
     if check_route_conflict(a, b):
         print("Маршрут конфликтует с уже установленными!")
         reset_node_selection()
@@ -1505,20 +1276,16 @@ def on_two_nodes_selected(a, b):
     if settingRoute == True:
         reset_node_selection()
         return
-
     # 2. Ищем настройки стрелок для этого маршрута
     key = (a, b)
-
     if key not in route_switch_modes:
         key = (b, a)
-
     if key not in route_switch_modes:
         print("Для этого маршрута нет настроек стрелок")
         reset_node_selection()
         return
 
     route_cfg = route_switch_modes[key]   # только нужные стрелки для ЭТОГО маршрута
-
     last_switch_check = {}
     changed = []
     main_diag = None  # какая стрелка будет мигать в табличке
@@ -1526,7 +1293,6 @@ def on_two_nodes_selected(a, b):
     for diag_name, need_mode in route_cfg.items():
         current_mode = diagonal_modes.get(diag_name)
         ok = (current_mode == need_mode)
-
         last_switch_check[diag_name] = {
             "needed": need_mode,
             "current": current_mode,
@@ -1542,12 +1308,10 @@ def on_two_nodes_selected(a, b):
         main_diag = next(iter(route_cfg.keys()))
     settingRoute = True
     paint_route(a, b, "cyan")
-
     blink_route(a, b, duration_ms=2000, interval_ms=150)
 
     if main_diag is not None:
         blink_switches([main_diag], duration_ms=2000, interval_ms=150)
-
     if changed:
         print("Изменены стрелки:")
         for line in changed:
@@ -1569,7 +1333,6 @@ def on_two_nodes_selected(a, b):
         current_values.append(rid)
         combobox1["values"] = tuple(current_values)
         recalc_signals_from_active_routes()
-
     root.after(2100, finalize)
 
 def comboboxDelete(ids):
@@ -1594,7 +1357,6 @@ def check():
     print("Активные маршруты")
     print(active_routes)
 
-#########################################        Arduino: функции подключения/отправки ##########################################
 def init_arduino():
     """
     Поиск порта и подключение к Arduino.
@@ -1628,7 +1390,64 @@ def init_arduino():
         if arduino_status_label is not None:
             arduino_status_label.config(text="Arduino: нет соединения", fg="red")
 
-####################################################################################################
+def set_arduino_status(connected: bool, text: str = ""):
+    if connected:
+        arduino_status_label.config(text=f"Arduino: {text}", bg="green", fg="black")
+    else:
+        arduino_status_label.config(text="Arduino: not connected", bg="red", fg="white")
+
+
+def poll_arduino():
+    global ser
+    if ser is not None and ser.is_open:
+        try:
+            data = ser.read(1)  # один байт = 8 кнопок
+        except SerialException as e:
+            print(f"Ошибка чтения из Arduino: {e}")
+            ser = None
+            set_arduino_status(False)
+            root.after(2000, init_arduino)
+        else:
+            if data:
+                val = data[0]
+                bits = bytes_to_bits(data, bits_needed=len(SEGMENT_ORDER))
+                apply_bits_to_segments(bits)
+
+    root.after(20, poll_arduino)
+
+def find_arduino_port():
+    ports = list_ports.comports()
+    for p in ports:
+        desc = p.description.lower()
+        if "arduino" in desc or "ch340" in desc or "usb serial" in desc:
+            print(f"Найдено Arduino-подобное устройство: {p.device} ({p.description})")
+            return p.device
+    if ports:
+        print(f"Не удалось однозначно определить Arduino, беру первый порт: {ports[0].device}")
+        return ports[0].device
+    print("COM-порты не найдены вообще.")
+    return None
+
+def init_arduino(port=None, baudrate=9600):
+    global ser
+    if port is None:
+        port = find_arduino_port()
+        if port is None:
+            set_arduino_status(False)
+            return
+
+    try:
+        ser = serial.Serial(port, baudrate, timeout=0)
+        time.sleep(2)             # даём плате перезапуститься
+        ser.reset_input_buffer()  # чистим мусор
+        print(f"Arduino подключено на {port}")
+        set_arduino_status(True, text=port)
+    except SerialException as e:
+        ser = None
+        set_arduino_status(False)
+        print(f"Не удалось открыть {port}: {e}")
+        print("Попробую переподключиться через 2 секунды.")
+        root.after(2000, init_arduino)
 
 #########################################        ТУПИКИ               ##############################################
 drawDeadEnd("pastM1", "right", 0)
@@ -1692,6 +1511,7 @@ canvas.tag_bind("switch", "<Leave>", switch_on_leave)
 # метка статуса Arduino
 arduino_status_label = tkinter.Label(root, text="Arduino: проверка...", fg="orange")
 arduino_status_label.place(x=360, y=20)
+
 n = tkinter.StringVar()
 combobox1 = ttk.Combobox(root, width = 25, textvariable = n, state='readonly')
 combobox1.place(x=510,y=20)
@@ -1747,493 +1567,12 @@ for i in range(18):
     button69.place(x=1220, y=40 + i * 25)
 
 
-#########################################        ARDUINO: ПОИСК ПОРТА И ОПРОС      ##############################################
-def find_arduino_port():
-    ports = list_ports.comports()
-    for p in ports:
-        desc = p.description.lower()
-        if "arduino" in desc or "ch340" in desc or "usb serial" in desc:
-            print(f"Найдено Arduino-подобное устройство: {p.device} ({p.description})")
-            return p.device
-    if ports:
-        print(f"Не удалось однозначно определить Arduino, беру первый порт: {ports[0].device}")
-        return ports[0].device
-    print("COM-порты не найдены вообще.")
-    return None
-
-def init_arduino(port=None, baudrate=9600):
-    global ser
-
-    if port is None:
-        port = find_arduino_port()
-        if port is None:
-            set_arduino_status(False)
-            return
-
-    try:
-        ser = serial.Serial(port, baudrate, timeout=0)
-        time.sleep(2)             # даём плате перезапуститься
-        ser.reset_input_buffer()  # чистим мусор
-        print(f"Arduino подключено на {port}")
-        set_arduino_status(True, text=port)
-    except SerialException as e:
-        ser = None
-        set_arduino_status(False)
-        print(f"Не удалось открыть {port}: {e}")
-        print("Попробую переподключиться через 2 секунды.")
-        root.after(2000, init_arduino)
-
-def bytes_to_bits(data: bytes, bits_needed: int) -> list[int]:
-    bits: list[int] = []
-    for byte in data:
-        for bit_index in range(8):
-            bits.append((byte >> bit_index) & 1)
-            if len(bits) >= bits_needed:
-                return bits
-    while len(bits) < bits_needed:
-        bits.append(0)
-
-    return bits
-
-def get_gui_lamps_for_aspect(name: str, aspect: str):
-    """
-    По имени светофора и аспекту возвращаем:
-      lit   – индексы ламп, которые горят постоянно
-      blink – индексы ламп, которые мигают
-    """
-    roles = signal_lamp_roles.get(name, {})
-    lit = set()
-    blink = set()
-
-    if aspect == "red":
-        idx = roles.get("red")
-        if idx is not None:
-            lit.add(idx)
-
-    elif aspect == "green":
-        idx = roles.get("green")
-        if idx is not None:
-            lit.add(idx)
-
-    elif aspect == "two_yellow":
-        low_idx = roles.get("yellow_low") or roles.get("yellow")
-        high_idx = roles.get("yellow_high") or low_idx
-        if low_idx is not None:
-            lit.add(low_idx)
-        if high_idx is not None:
-            lit.add(high_idx)
-
-    elif aspect == "one_yellow":
-        idx = roles.get("yellow_low") or roles.get("yellow")
-        if idx is not None:
-            lit.add(idx)
-
-    elif aspect == "one_yellow_blink":
-        idx = roles.get("yellow_low") or roles.get("yellow")
-        if idx is not None:
-            lit.add(idx)
-            blink.add(idx)
-
-    elif aspect == "white":
-        idx = roles.get("white")
-        if idx is not None:
-            lit.add(idx)
-
-    elif aspect == "white_blink":
-        idx = roles.get("white")
-        if idx is not None:
-            lit.add(idx)
-            blink.add(idx)
-
-    elif aspect == "two_yellow":
-        low_idx = roles.get("yellow_low") or roles.get("yellow")
-        high_idx = roles.get("yellow_high") or low_idx
-        if low_idx is not None:
-            lit.add(low_idx)
-        if high_idx is not None:
-            lit.add(high_idx)
-
-    elif aspect == "invite":
-        # красный горит постоянно
-        ridx = roles.get("red")
-        if ridx is not None:
-            lit.add(ridx)
-
-        # белый мигает
-        widx = roles.get("white")
-        if widx is not None:
-            lit.add(widx)
-            blink.add(widx)
-
-    return lit, blink
-
-
-
-
-def get_current_ch_aspect() -> str:
-    """
-    Выдаёт текущий аспект для CH с учётом:
-      - выбранного маршрута (ROUTE_SIGNAL_ASPECTS)
-      - факта, что поезд уже вошёл на маршрут (ch_route_passed)
-      - занятости защищаемых участков (is_route_occupied_for_CH)
-    """
-    dest = find_active_entry_route_from_CH()
-    route_cfg = ROUTE_SIGNAL_ASPECTS.get(dest, ROUTE_SIGNAL_ASPECTS[None])
-
-    global invite_until
-    if time.time() < invite_until:
-        return "invite"
-    # <-- ДО СЮДА
-
-    if dest is None:
-        return route_cfg.get("CH", "red")
-
-    if invite_until > 0:
-        if time.time() < invite_until:
-            return "white_blink"
-        else:
-            invite_until = 0.0
-
-    if dest is None:
-        return route_cfg.get("CH", "red")
-
-    if dest in ch_route_passed:
-        if is_route_occupied_for_CH(dest):
-            ch_route_passed[dest] = True
-
-        if ch_route_passed[dest]:
-            return "red"
-
-    return route_cfg.get("CH", "red")
-
-def is_maneuver_route_H3_M10_active() -> bool:
-    """
-    Проверяем, есть ли активный МАНЕВРОВЫЙ маршрут H3–M10 или M10–H3.
-    """
-    for rid, data in active_routes.items():
-        a = data["start"]
-        b = data["end"]
-
-        if (a, b) not in routes and (b, a) not in routes:
-            continue
-
-        if (a == "H3" and b == "M10") or (a == "M10" and b == "H3"):
-            return True
-
-    return False
-
-
-def build_signal_byte_for_arduino_by_route() -> int:
-    aspect_ch = get_current_ch_aspect()
-
-    # 0 = ВКЛ, 1 = ВЫКЛ -> чтобы включить несколько ламп сразу, надо AND-ить
-    def comb(*vals: int) -> int:
-        out = 0xFF
-        for v in vals:
-            out &= (v & 0xFF)
-        return out
-
-    if aspect_ch == "invite":
-        red = CH_595_PATTERNS["red"]
-        white = CH_595_PATTERNS["white"]
-
-        # белый мигает, красный постоянный
-        return comb(red, white) if signal_blink_phase else red
-
-    return CH_595_PATTERNS.get(aspect_ch, CH_595_PATTERNS["red"])
-
-def send_signal_bytes(byte_ch: int, byte_man: int = 0xFF):
-    """
-    Отправка состояний светофоров в Arduino.
-
-    Протокол:
-      'L', <byte_ch>, <byte_man>
-
-    byte_ch  – байт для транспортного светофора CH
-    byte_man – байт для маневрового светофора (H3–M10 и т.п.)
-    """
-    global ser
-    print(f"[PY] SIGNAL -> L {byte_ch:08b} {byte_man:08b}")
-    if ser is None or not ser.is_open:
-        print("send_signal_bytes: нет соединения с Arduino")
-        return
-    try:
-        ser.write(bytes([ord('L'), byte_ch & 0xFF, byte_man & 0xFF]))
-    except SerialException as e:
-        print(f"Ошибка отправки байтов сигналов в Arduino: {e}")
-
-def recalc_signal_aspects():
-    """
-    1) Ставим огни в GUI по ROUTE_SIGNAL_ASPECTS + "память" для CH
-    2) Отправляем байты в Arduino (CH + маневровый)
-    """
-    signal_aspects.clear()
-
-    dest = find_active_entry_route_from_CH()
-    route_cfg = ROUTE_SIGNAL_ASPECTS.get(dest, ROUTE_SIGNAL_ASPECTS[None])
-
-    ch_aspect = get_current_ch_aspect()
-
-    for name in TRAIN_SIGNALS:
-        if name == "CH":
-            aspect = ch_aspect
-        else:
-            aspect = route_cfg.get(name, "red")
-
-        lit, blink = get_gui_lamps_for_aspect(name, aspect)
-        signal_aspects[name] = (lit, blink)
-
-    byte_ch = build_signal_byte_for_arduino_by_route()
-    byte_man = build_maneuver_signal_byte()
-
-    send_signal_bytes(byte_ch, byte_man)
-
-def build_maneuver_signal_byte() -> int:
-    global man_red_until
-
-    if time.time() < man_red_until:
-        return MAN_595_PATTERNS["red"]   # постоянно, без мигания
-
-    if is_maneuver_route_H3_M10_active():
-        return MAN_595_PATTERNS["H3_M10_white"]
-
-    return MAN_595_PATTERNS["off"]
-
-
-
-def apply_bits_to_segments(bits: list[int]):
-    """
-    bits[i] относится к SEGMENT_ORDER[i].
-
-    1 в бите = кнопка НАЖАТА -> сегмент ЗАНЯТ (0)
-    0 в бите = кнопка ОТПУЩЕНА -> сегмент СВОБОДЕН (1)
-    """
-    global last_bits
-
-    if last_bits is None:
-        last_bits = bits[:]
-        for idx, (bit_value, seg) in enumerate(zip(bits, SEGMENT_ORDER)):
-            occ = 0 if bit_value == 1 else 1
-            seg_occ_train[seg] = occ
-            print(f"[INIT BTN {idx}] raw_bit={bit_value} segment={seg} -> seg_occ_train={occ}")
-        return
-
-    for idx, (bit_value, seg) in enumerate(zip(bits, SEGMENT_ORDER)):
-        old_bit = last_bits[idx]
-        if bit_value == old_bit:
-            continue  # ничего не изменилось — пропускаем
-
-        # тут важная инверсия:
-        # 1 (нажата) -> 0 (занят)
-        # 0 (отпущена) -> 1 (свободен)
-        occ = 0 if bit_value == 1 else 1
-        seg_occ_train[seg] = occ
-        print(f"[BTN {idx}] raw_bit={bit_value} segment={seg} -> seg_occ_train={occ}")
-
-    last_bits = bits[:]
-
-
-def poll_arduino():
-    global ser
-
-    if ser is not None and ser.is_open:
-        try:
-            data = ser.read(1)  # один байт = 8 кнопок
-        except SerialException as e:
-            print(f"Ошибка чтения из Arduino: {e}")
-            ser = None
-            set_arduino_status(False)
-            root.after(2000, init_arduino)
-        else:
-            if data:
-                val = data[0]
-                bits = bytes_to_bits(data, bits_needed=len(SEGMENT_ORDER))
-                apply_bits_to_segments(bits)
-
-
-    root.after(20, poll_arduino)
-
-
-#########################################   ОТПРАВКА БАЙТОВ СИГНАЛОВ В ARDUINO  #########################################
-
-# 0 в бите = лампа ВКЛ, 1 = ВЫКЛ.
-# Эти значения ты уже подгонял на железе (0b11011111 = красный и т.п.).
-
-CH_595_PATTERNS = {
-    "red":         0b11011111,  # один красный
-
-    "two_yellow":  0b10110111,  # два жёлтых
-    "one_yellow":  0b10111111,  # один жёлтый
-
-    "white": 0b01111111,  # <-- ДОБАВИТЬ СЮДА
-
-    "green":       0b11101111,  # зелёный
-
-    "off":         0b11111111,  # всё выкл
-}
-
-# второй регистр – манёвровые/доп. светофоры
-MAN_595_PATTERNS = {
-    "off":            0b11111111,  # всё выключено
-    "H3_M10_white":   0b01111111,  # белый при маршруте H3–M10
-    "red":            0b11011111,   # <-- ПОДСТАВЬ СВОЙ БИТ КРАСНОГО
-}
-
-invite_until = 0.0        # до какого времени CH белый мигает
-man_red_until = 0.0       # до какого времени MAN красный горит постоянно
-
-def start_invite_mode():
-    global invite_until, man_red_until
-    invite_until = time.time() + 60.0
-    man_red_until = time.time() + 60.0
-    recalc_signal_aspects()   # применить сразу
-
-
-# какие аспекты должны быть у светофоров при разных маршрутах CH
-ROUTE_SIGNAL_ASPECTS = {
-    None: {
-        "CH": "red",
-        "H1": "red",
-        "H2": "red",
-        "H3": "red",
-        "H4": "red",
-    },
-    "1": {   # CH → 1 (главный путь)
-        "CH": "one_yellow",
-        "H1": "red",
-        "H2": "red",
-        "H3": "red",
-        "H4": "red",
-    },
-    "2": {   # CH → 2 (боковой)
-        "CH": "two_yellow",
-        "H1": "red",
-        "H2": "red",
-        "H3": "red",
-        "H4": "red",
-    },
-    "3": {   # CH → 3
-        "CH": "two_yellow",
-        "H1": "red",
-        "H2": "red",
-        "H3": "red",
-        "H4": "red",
-    },
-    "4": {   # CH → 4
-        "CH": "two_yellow",
-        "H1": "red",
-        "H2": "red",
-        "H3": "red",
-        "H4": "red",
-    },
-}
-
-# УЧАСТКИ, КОТОРЫЕ «ЗАЩИЩАЕТ» ВХОДНОЙ СВЕТОФОР CH
-ROUTE_PROTECT_SEGMENTS_FOR_CH = {
-    None: [],
-    "1": [("M2", "CH")],
-    "2": [("M2", "CH")],
-    "3": [("M2", "CH")],
-    "4": [("M2", "CH")],
-}
-
-def is_route_occupied_for_CH(dest: str | None) -> bool:
-    """
-    Проверяем, есть ли поезд на защищаемых для данного направления участках.
-    dest = '1'/'2'/'3'/'4' или None.
-    seg_occ_train: 0 = занято, 1 = свободно.
-    """
-    if dest is None:
-        return False
-
-    segs = ROUTE_PROTECT_SEGMENTS_FOR_CH.get(dest, [])
-    for a, b in segs:
-        if seg_occ_train.get((a, b), 1) == 0:
-            return True
-        if seg_occ_train.get((b, a), 1) == 0:
-            return True
-
-    return False
-
-# память: поезд уже прошёл под входным светофором по этому направлению
-ch_route_passed = { "1": False, "2": False, "3": False, "4": False }
-
-
-#########################################  ЛОГИКА ПОЕЗДНЫХ СВЕТОФОРОВ  #########################################
-
-TRAIN_SIGNALS = {"CH", "H1", "H2", "H3", "H4"}
-
-signal_lamp_roles: dict[str, dict[str, int]] = {}
-signal_aspects: dict[str, tuple[set[int], set[int]]] = {}
-
-signal_blink_phase = False
-SIGNAL_OFF_COLOR = "#202020"
-
-
-def init_signal_roles():
-    """
-    Маппим индексы огней (в signals_config) в роли: красный/зелёный/жёлтые.
-    """
-    for name in TRAIN_SIGNALS:
-        cfg = signals_config.get(name)
-        if not cfg:
-            continue
-        cols = cfg["colors"]
-        roles: dict[str, int] = {}
-
-        if "red" in cols:
-            roles["red"] = cols.index("red")
-        if "green" in cols:
-            roles["green"] = cols.index("green")
-
-        ys = [i for i, c in enumerate(cols) if c == "yellow"]
-        if ys:
-            roles["yellow_low"] = ys[0]
-            if len(ys) > 1:
-                roles["yellow_high"] = ys[-1]
-            else:
-                roles["yellow"] = ys[0]
-
-        if "white" in cols:
-            roles["white"] = cols.index("white")
-
-        signal_lamp_roles[name] = roles
-
-def start_invite_ch():
-    global invite_until
-    invite_until = time.time() + 10.0
-    recalc_signal_aspects()  # применить сразу
-
-btn_invite = tkinter.Button(root, text="ПРИГЛАСИТЕЛЬНЫЙ", command=lambda: start_invite_mode())
-btn_invite.place(x=950, y=18)
-
-
-def find_active_entry_route_from_CH():
-    """
-    Ищем активный поездной маршрут CH -> 1/2/3/4.
-    Возвращает '1', '2', '3', '4' или None.
-    """
-    for rid, data in active_routes.items():
-        a = data["start"]
-        b = data["end"]
-
-        if (a, b) not in train_routes and (b, a) not in train_routes:
-            continue
-
-        if a == "CH" and b in ("1", "2", "3", "4"):
-            return b
-        if b == "CH" and a in ("1", "2", "3", "4"):
-            return a
-
-    return None
-
-
-#########################################        ЗАПУСК ЦИКЛОВ                    ##############################################
-init_arduino()          # порт ищется автоматически
-update_all_occupancy()
+#########################################        ЗАПУСК ЦИКЛОВ                    ##############################################         # порт ищется автоматически
+init_arduino()
 poll_arduino()
-# init_signal_roles()
-# update_signals_visual()
+update_all_occupancy()
 update_signals_visual_v2()  # новое (все сигналы)
 recalc_signals_to_red(None)
+root.protocol('WM_DELETE_WINDOW', quit_function)
+canvas.pack()
 root.mainloop()

@@ -502,3 +502,50 @@ route_switch_modes = {
     ("M2", "H4"): {"ALB_Turn2": "left", "ALB_Turn4-6": "right", "ALB_Turn8": "right"},
     ("H2", "M2"): {"ALB_Turn8": "left", "ALB_Turn4-6": "right", "ALB_Turn2": "left"},
 }
+
+#Arduino Configs
+ROUTE_SIGNAL_ASPECTS = {
+    None: {
+        "CH": "red",
+        "H1": "red",
+        "H2": "red",
+        "H3": "red",
+        "H4": "red",
+    },
+    "1": {   # CH → 1 (главный путь)
+        "CH": "one_yellow",
+        "H1": "red",
+        "H2": "red",
+        "H3": "red",
+        "H4": "red",
+    },
+    "2": {   # CH → 2 (боковой)
+        "CH": "two_yellow",
+        "H1": "red",
+        "H2": "red",
+        "H3": "red",
+        "H4": "red",
+    },
+    "3": {   # CH → 3
+        "CH": "two_yellow",
+        "H1": "red",
+        "H2": "red",
+        "H3": "red",
+        "H4": "red",
+    },
+    "4": {   # CH → 4
+        "CH": "two_yellow",
+        "H1": "red",
+        "H2": "red",
+        "H3": "red",
+        "H4": "red",
+    },
+}
+# УЧАСТКИ, КОТОРЫЕ «ЗАЩИЩАЕТ» ВХОДНОЙ СВЕТОФОР CH
+ROUTE_PROTECT_SEGMENTS_FOR_CH = {
+    None: [],
+    "1": [("M2", "CH")],
+    "2": [("M2", "CH")],
+    "3": [("M2", "CH")],
+    "4": [("M2", "CH")],
+}

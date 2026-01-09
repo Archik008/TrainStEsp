@@ -120,7 +120,7 @@ segment_groups = {
         ("M2H1_mid", "M2H1_third"),
         ("M2H1_third","H1")
     ],
-    "block_M6,H2": [
+    "block_M6_H2": [
         ("H2", "M6H2"),
         ("M6", "M6H2"),
     ],
@@ -688,7 +688,7 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     ("M2", "H1"):{
         "M2": {"lamps": { "white": {"on": True, "blink": False}, } },
     },
-    
+
     ("CH", "1"): {
          "CH": { "lamps": { "yellow1": {"on": True, "blink": False},} },
         "H1": { "lamps": { "green": {"on": True, "blink": False},} },
@@ -699,8 +699,11 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     ("M8", "M1"): { "M8": { "lamps": { "white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},} },
                     "M1": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},} }
     },
-    
-
+    ("M6", "H2"): {"M6": {"lamps": {"white": {"on": True, "blink": False},} },},
+    ("M10", "M1"): {"M10": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False}, }},
+                   "M1": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False}, }}
+                   },
+    ("M2", "M8"): {"M2": {"lamps": {"white": {"on": True, "blink": False}, }}, },
 }
 
 def recalc_signals_to_red(rid) -> None:
@@ -826,9 +829,6 @@ def update_signals_visual_v2() -> None:
 
     root.after(350, update_signals_visual_v2)
 
-button666 = tkinter.Button(root, text="recalc", command=recalc_signals_from_active_routes)
-button666.place(x=10, y=10)
-
 #########################################        МАРШРУТЫ                ##############################################
 # ВАЖНО: id сегмента – кортеж, как в segment_ids
 routes = {
@@ -881,6 +881,7 @@ routes = {
     ("H2", "M6"): [
         {"type": "segment", "id": ("H2", "M6H2")},
         {"type": "segment", "id": ("M6H2", "M6")},
+        {"type": "segment", "id": ("M6", "beforeM6")},
     ],
     ("H2", "M2"): [
         {"type": "segment", "id": ("H2", "M6H2")},

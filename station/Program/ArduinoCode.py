@@ -5,6 +5,8 @@ from TestRazdel import seg_occ_train, active_routes, routes, signal_blink_phase
 from serial import SerialException
 import time
 
+
+
 # ===================== СВЕТОФОРЫ: логика байтов/аспектов =====================
 
 # 1) Какие лампы должны гореть для каждого "аспекта" (сигнала)

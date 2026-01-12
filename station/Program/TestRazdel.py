@@ -16,8 +16,8 @@ canvas = tk.Canvas(root, width=1250, height=600, bg="white")
 
 
 def quit_function():
-    response = tkinter.messagebox.askyesno('Exit', 'Are you sure you want to exit?')
-    if response:
+    #response = tkinter.messagebox.askyesno('Exit', 'Are you sure you want to exit?')
+    #if response:
         exit()
 
 
@@ -307,6 +307,7 @@ def recalc_signals_to_red(rid) -> None:
         for name in cfg:
             if name in AdditionalSignals:
                 continue
+
             for lamp in signals_state[name]["lamps"].values():
                 lamp["on"] = False
                 lamp["blink"] = False
@@ -332,35 +333,35 @@ def recalc_signals_to_red(rid) -> None:
                 for colors in signals_state[name]["lamps"]:
                     signals_state[name]["lamps"][colors]["on"] = False
 
-def recalc_signals_from_active_routes() -> None:
-
+def recalc_signals_from_active_routes(route):
+    """
        # 2) применить активные маршруты
     for rid, data in active_routes.items():
         a = data.get("start")
         b = data.get("end")
         if not a or not b:
             continue
-
-        key = (a, b)
+    """
+    key = route
         #if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
             #print("recalc_signals_from_active_routes")
 
-        cfg = ROUTE_SIGNAL_MAP.get(key)
-        if not cfg:
-            continue
+    cfg = ROUTE_SIGNAL_MAP.get(key)
+        #if not cfg:
+            #continue
 
-        for name in cfg:
+    for name in cfg:
 
-            if name in signals_state:
-                for lamp in signals_state[name]["lamps"].values():
-                    lamp["on"] = False
-                    lamp["blink"] = False
-            for color, lamp_cfg in cfg[name]["lamps"].items():
-                if color not in signals_state[name]["lamps"]:
-                    continue
+        if name in signals_state:
+            for lamp in signals_state[name]["lamps"].values():
+                lamp["on"] = False
+                lamp["blink"] = False
 
-                signals_state[name]["lamps"][color]["on"] = lamp_cfg.get("on", False)
-                signals_state[name]["lamps"][color]["blink"] = lamp_cfg.get("blink", False)
+        for color, lamp_cfg in cfg[name]["lamps"].items():
+            if color not in signals_state[name]["lamps"]:
+                continue
+            signals_state[name]["lamps"][color]["on"] = lamp_cfg.get("on", False)
+            signals_state[name]["lamps"][color]["blink"] = lamp_cfg.get("blink", False)
 
 
 def update_signals_visual_v2() -> None:
@@ -375,7 +376,7 @@ def update_signals_visual_v2() -> None:
     except Exception:
         # если build_frame/signal_defs ещё не подключены - рисуем GUI
         pass
-
+    print(occupied_segments)
     # 3) покрасить все светофоры
     for name in signals_config.keys():
         if name not in signal_ids:
@@ -824,6 +825,7 @@ def update_all_occupancy():
                         signals_state[signal_diag]["lamps"][colors]["on"] = True
                     else:
                         signals_state[signal_diag]["lamps"][colors]["on"] = False
+
             occupied_diagonals.discard(diag)
             check_if_route_finished(seg="", rev="", diag=diag)
     for (a, b), seg_id in segment_ids.items():
@@ -1332,7 +1334,7 @@ def on_two_nodes_selected(a, b):
         current_values = list(combobox1["values"])
         current_values.append(rid)
         combobox1["values"] = tuple(current_values)
-        recalc_signals_from_active_routes()
+        recalc_signals_from_active_routes((a,b))
     root.after(2100, finalize)
 
 def comboboxDelete(ids):
@@ -1358,9 +1360,8 @@ def check():
     print(active_routes)
 
 def init_arduino():
-    """
-    Поиск порта и подключение к Arduino.
-    """
+   # Поиск порта и подключение к Arduino.
+    
     global arduino, arduino_status_label
 
     try:
@@ -1415,6 +1416,7 @@ def poll_arduino():
 
     root.after(20, poll_arduino)
 
+
 def find_arduino_port():
     ports = list_ports.comports()
     for p in ports:
@@ -1428,12 +1430,14 @@ def find_arduino_port():
     print("COM-порты не найдены вообще.")
     return None
 
+"""
 def init_arduino(port=None, baudrate=9600):
     global ser
     if port is None:
         port = find_arduino_port()
         if port is None:
-            set_arduino_status(False)
+            #set_arduino_status(False)
+
             return
 
     try:
@@ -1441,13 +1445,13 @@ def init_arduino(port=None, baudrate=9600):
         time.sleep(2)             # даём плате перезапуститься
         ser.reset_input_buffer()  # чистим мусор
         print(f"Arduino подключено на {port}")
-        set_arduino_status(True, text=port)
+        #set_arduino_status(True, text=port)
     except SerialException as e:
         ser = None
-        set_arduino_status(False)
+        #set_arduino_status(False)
         print(f"Не удалось открыть {port}: {e}")
         print("Попробую переподключиться через 2 секунды.")
-        root.after(2000, init_arduino)
+"""
 
 #########################################        ТУПИКИ               ##############################################
 drawDeadEnd("pastM1", "right", 0)

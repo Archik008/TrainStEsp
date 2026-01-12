@@ -93,8 +93,9 @@ segment_to_signal = {
     ('M1', 'M8mid'): "M8",
     ("M8", "H1"): "H1",
     ('M1', 'M8mid'): "M1",
+    ('M8mid', 'M8'): "M1",
     #("pastM1", "M1"): "M1",
-    ("M10", "H3"): "H3",
+    #("M10", "H3"): "H3",
     ("M2", "M2H1_mid"): "M2",
     ("M2H1_mid", "M2H1_third"): "M2",
     ("M2H1_third", "H1"): "M2",
@@ -104,6 +105,9 @@ segment_to_signal = {
 
 diag_to_signal = {
     "ALB_Turn1": "M10",
+    "ALB_Turn8": "H4",
+    "ALB_Turn2": "H3",
+
 }
 diagonal_config = {
     "ALB_Turn1": {
@@ -222,7 +226,7 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
         "M1": {"lamps": {"white": {"on": True, "blink": False}, }, },
     },
     ("M2", "H3"): { "M2": { "lamps": { "white": {"on": True, "blink": False}, } },
-                    "H3": { "lamps": { "yellow": {"on": True, "blink": False}, "red":    {"on": False, "blink": False}, "green": {"on": True, "blink": False}, } },
+
     },
     ("M2", "M10"): { "M2": {"lamps": { "white": {"on": True, "blink": False},} },
                     "H3": { "lamps": { "green": {"on": True, "blink": False}, } },
@@ -286,6 +290,9 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     ("H4", "M6"):{
         "H4": {"lamps": { "green": {"on": True, "blink": False}, "yellow": {"on": True, "blink": False}, }, },
         "M6": {"lamps": {"white": {"on": True, "blink": False},},},
+    },
+    ("H3", "M2"): {
+        "H3": {"lamps": {"green": {"on": True, "blink": False}, "yellow": {"on": True, "blink": False}, }, },
     },
 }
 routes = {
@@ -439,6 +446,10 @@ routes = {
         {"type": "segment", "id": ("M8mid", "M1")},
         {"type": "segment", "id": ("M8mid", "M8")},
         {"type": "diag", "name": "ALB_Turn1"},
+    ],
+    ("H3", "M2"): [
+        {"type": "diag", "name": "ALB_Turn2"},
+        {"type": "segment", "id": ("M2", "M2H1_mid")},
     ]
 }
 

@@ -21,6 +21,7 @@ def quit_function():
         exit()
 
 
+
 CANVAS_W = 1200
 CANVAS_H = 600
 root.resizable(False, False)
@@ -291,6 +292,11 @@ def gui_lamps_from_state(sig_name: str) -> tuple[set[int], set[int]]:
 
     return lit, blink
 
+def invite_signal_on_off(signalName):
+    if signalName in signals_state and signals_state[signalName]["lamps"]["white"]["on"] == True:
+        signals_state[signalName]["lamps"]["white"]["on"] = False
+    elif signalName in signals_state and signals_state[signalName]["lamps"]["white"]["on"] == False:
+        signals_state[signalName]["lamps"]["white"]["on"] = True
 
 def recalc_signals_to_red(rid) -> None:
     AdditionalSignals = ["ALB_Sect1-2", "ALB_Sect1-2_2", "ALB_Sect2"]
@@ -307,8 +313,9 @@ def recalc_signals_to_red(rid) -> None:
         for name in cfg:
             if name in AdditionalSignals:
                 continue
-
-            for lamp in signals_state[name]["lamps"].values():
+            for lamp_name, lamp in signals_state[name]["lamps"].items():
+                if lamp_name == "white" and name == "CH":
+                    continue
                 lamp["on"] = False
                 lamp["blink"] = False
             if "red" in signals_state[name]["lamps"]:
@@ -322,7 +329,7 @@ def recalc_signals_to_red(rid) -> None:
         for name in signals_state.keys():
             if name in AdditionalSignals:
                 continue
-            for lamp in signals_state[name]["lamps"].values():
+            for lamp_name, lamp in signals_state[name]["lamps"].items():
                 lamp["on"] = False
                 lamp["blink"] = False
             if "red" in signals_state[name]["lamps"]:
@@ -331,6 +338,8 @@ def recalc_signals_to_red(rid) -> None:
                 signals_state[name]["lamps"]["blue"]["on"] = True
             else:
                 for colors in signals_state[name]["lamps"]:
+                    if colors == "white":
+                        continue
                     signals_state[name]["lamps"][colors]["on"] = False
 
 def recalc_signals_from_active_routes(route):
@@ -345,20 +354,20 @@ def recalc_signals_from_active_routes(route):
     key = route
         #if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
             #print("recalc_signals_from_active_routes")
-
     cfg = ROUTE_SIGNAL_MAP.get(key)
         #if not cfg:
             #continue
-
     for name in cfg:
-
         if name in signals_state:
-            for lamp in signals_state[name]["lamps"].values():
+            for lamp_name, lamp in signals_state[name]["lamps"].items():
+                if name == "CH" and lamp_name == "white":
+                    continue
                 lamp["on"] = False
                 lamp["blink"] = False
-
         for color, lamp_cfg in cfg[name]["lamps"].items():
             if color not in signals_state[name]["lamps"]:
+                continue
+            if color == "white" and name == "CH":
                 continue
             signals_state[name]["lamps"][color]["on"] = lamp_cfg.get("on", False)
             signals_state[name]["lamps"][color]["blink"] = lamp_cfg.get("blink", False)
@@ -367,7 +376,6 @@ def recalc_signals_from_active_routes(route):
 def update_signals_visual_v2() -> None:
 
     global signal_blink_phase
-
     # 2) (опционально) собрать байты в порядке signals_config — для отладки/будущей отправки в Arduino
     try:
         regs = build_frame(signals_config, signal_defs, signals_state, blink_phase=signal_blink_phase)  # type: ignore[name-defined]
@@ -376,7 +384,6 @@ def update_signals_visual_v2() -> None:
     except Exception:
         # если build_frame/signal_defs ещё не подключены - рисуем GUI
         pass
-    print(occupied_segments)
     # 3) покрасить все светофоры
     for name in signals_config.keys():
         if name not in signal_ids:
@@ -451,7 +458,6 @@ def make_signal_state(name, colors):
             for color in colors
         }
     }
-
 #########################################       ОТРИСОВКА СВЕТОФОРОВ                ##############################################
 def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
     x, y = positions[name]
@@ -781,8 +787,6 @@ def check_if_route_finished(seg, rev, diag):
                 if last_all.get("type") == "segment":
                     if s == last_all["id"] or rev == last_all["id"]:
                         release_route(rid)
-
-
 part_to_split = {}
 
 for split_name in split_parts_map:
@@ -1142,7 +1146,6 @@ def on_node_click(event):
 
     selected_nodes.append(name)
     canvas.itemconfig(node_ids[name], fill="cyan")
-    print("Выбрано узлов:", len(selected_nodes), "->", selected_nodes)
 
     if len(selected_nodes) == 1:
         highlight_possible_targets(name)
@@ -1318,12 +1321,13 @@ def on_two_nodes_selected(a, b):
         print("Изменены стрелки:")
         for line in changed:
             print("  ", line)
+    """
     else:
         if route_cfg:
             print("Стрелки уже стояли как нужно.")
         else:
             print("Маршрут без задействования стрелок.")
-
+    """
     reset_node_selection()
     visualSwitch(key)
     def finalize():
@@ -1503,11 +1507,23 @@ def set_mode(mode):
     selected_nodes.clear()
     apply_mode_visuals()
 
+
+def on_CH_click(event):
+    name = get_node_name_from_event(event)
+    if name == "CH":
+        menu = tk.Menu(root, tearoff=0)
+        menu.add_command(
+            label="Пригласительный",
+            command=lambda: invite_signal_on_off(name)
+        )
+        menu.tk_popup(event.x_root, event.y_root)
+
 #########################################        БИНДЫ И НАЧАЛЬНАЯ ОКРАСКА        ##############################################
 canvas.tag_bind("node", "<Button-1>", on_node_click)
 canvas.tag_bind("node", "<Enter>", on_enter)
 canvas.tag_bind("node", "<Leave>", on_leave)
 
+canvas.tag_bind("node", "<Button-3>", on_CH_click)
 canvas.tag_bind("switch", "<Button-1>", on_switch_click)
 canvas.tag_bind("switch", "<Enter>", switch_on_enter)
 canvas.tag_bind("switch", "<Leave>", switch_on_leave)

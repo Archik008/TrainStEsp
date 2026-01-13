@@ -246,6 +246,9 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     ("M2", "H1"): {
         "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
     },
+    ("M2", "H4"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
+    },
     ("M2", "2"): {
         "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
     },

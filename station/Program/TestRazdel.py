@@ -10,10 +10,12 @@ import time
 from serial import SerialException
 from tkinter import messagebox
 
+
 root = tk.Tk()
 root.title("Станция")
-canvas = tk.Canvas(root, width=1250, height=600, bg="white")
+canvas = tk.Canvas(root, width=1250, height=600, bg="#ede9e8")
 
+line_color_main = "black"
 
 def quit_function():
     #response = tkinter.messagebox.askyesno('Exit', 'Are you sure you want to exit?')
@@ -35,11 +37,11 @@ def drawDeadEnd(name, direction, offset):
     x = positions[name][0]
     y = positions[name][1]
     if direction == "right":
-        canvas.create_line(x, y, x + offset, y, width=4, fill="black")
+        canvas.create_line(x, y, x + offset, y, width=4, fill=line_color_main)
         canvas.create_line(x + offset, y - 15, x + offset, y + 15, width=6)
     elif direction == "left":
-        canvas.create_line(x, y, x - offset, y, width=4, fill="black")
-        canvas.create_line(x - offset, y - 15, x - offset, y + 15, width=6, fill="black")
+        canvas.create_line(x, y, x - offset, y, width=4, fill=line_color_main)
+        canvas.create_line(x - offset, y - 15, x - offset, y + 15, width=6, fill=line_color_main)
 
 #########################################        МАССИВЫ ЭЛЕМЕНТОВ               ##############################################
 selected_nodes = []
@@ -469,13 +471,13 @@ def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
     dy_sign = -1 if mount == "top" else 1
     sx, sy = x, y + dy_sign * stand_len
 
-    canvas.create_line(x, y, sx, sy, width=2, fill="black")
+    canvas.create_line(x, y, sx, sy, width=2, fill=line_color_main)
 
     hx_sign = 1 if pack_side == "right" else -1
 
     hx0, hy0 = sx, sy
     hx1, hy1 = sx + hx_sign * bar_len, sy
-    canvas.create_line(hx0, hy0, hx1, hy1, width=2, fill="black")
+    canvas.create_line(hx0, hy0, hx1, hy1, width=2, fill=line_color_main)
 
     ids = []
     start_cx = hx1 + hx_sign * (r + 1)
@@ -490,7 +492,7 @@ def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
         oid = canvas.create_oval(
             cx - r, cy - r,
             cx + r, cy + r,
-            outline="black", width=1, fill=fill_color
+            outline=line_color_main, width=1, fill=fill_color
         )
         ids.append(oid)
 
@@ -681,9 +683,9 @@ def create_switch_table():
 
     for i, name in enumerate(switch_list, start=1):
         y = y_start + (i - 1) * dy
-        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12), tags=(f"switch_{name}", "switch"))
+        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12), tags=(f"switch_{name}", "switch"), fill=line_color_main)
         switch_ids[name] = switch
-        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 12))
+        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 12), fill=line_color_main)
 
         rect = canvas.create_rectangle(
             x_rect - 8, y - 8, x_rect + 8, y + 8,
@@ -725,18 +727,18 @@ def blink_switches(diags, duration_ms=2000, interval_ms=200):
 #########################################        СТРЕЛКИ/ДИАГОНАЛИ               ##############################################
 
 def AddDiagonal(x1, y1, x2, y2, offsetleft, offsetright, nameDiag):
-    l1 = canvas.create_line(x1, y1, x1 - offsetleft, y1, width=3, fill="black")
-    l2 = canvas.create_line(x2, y2, x2 + offsetright, y2, width=3, fill="black")
-    l3 = canvas.create_line(x1, y1, x2, y2, width=3, fill="black")
+    l1 = canvas.create_line(x1, y1, x1 - offsetleft, y1, width=3, fill=line_color_main)
+    l2 = canvas.create_line(x2, y2, x2 + offsetright, y2, width=3, fill=line_color_main)
+    l3 = canvas.create_line(x1, y1, x2, y2, width=3, fill=line_color_main)
     diag_ids[(nameDiag)] = [l1, l2, l3]
 
 def AddSplitDiagonal(x1, y1, x2, y2,
                      x3, y3,offset_left,
                      offset_right, nameDiag, namePart1, namePart2):
-    l2 = canvas.create_line(x1, y1, x2, y2, width=3, fill="black")
-    l3 = canvas.create_line(x2, y2, x3, y3, width=3, fill="black")
-    l1 = canvas.create_line(x1, y1, x1 - offset_left, y1, width=3, fill="black")
-    l4 = canvas.create_line(x3, y3, x3 + offset_right, y3, width=3, fill="black")
+    l2 = canvas.create_line(x1, y1, x2, y2, width=3, fill=line_color_main)
+    l3 = canvas.create_line(x2, y2, x3, y3, width=3, fill=line_color_main)
+    l1 = canvas.create_line(x1, y1, x1 - offset_left, y1, width=3, fill=line_color_main)
+    l4 = canvas.create_line(x3, y3, x3 + offset_right, y3, width=3, fill=line_color_main)
     split_diag_ids[nameDiag] = {
         'partA': [l1, l2],
         'partB': [l3, l4]
@@ -748,7 +750,7 @@ def AddSplitDiagonal(x1, y1, x2, y2,
 for a, b in segments:
     x1, y1 = positions[a]
     x2, y2 = positions[b]
-    seg = canvas.create_line(x1 - 5, y1, x2 + 5, y2, width=6, fill="black")
+    seg = canvas.create_line(x1 - 5, y1, x2 + 5, y2, width=6, fill=line_color_main)
     segment_ids[(a, b)] = seg
     segment_ids[(b, a)] = seg
 
@@ -845,7 +847,7 @@ def update_all_occupancy():
                 if s in occupied_segments:
                     paint_segment(seg, "yellow")
                     continue
-            paint_segment(s, "black")
+            paint_segment(s, line_color_main)
 
         if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0 :
             paint_segment((a,b), "red")
@@ -854,7 +856,7 @@ def update_all_occupancy():
             paint_segment((a,b), "yellow")
             continue
 
-        paint_segment((a, b), "black")
+        paint_segment((a, b), line_color_main)
 
     for diag_name, lines in diag_ids.items():
         if diag_occ_train.get(diag_name, 1) == 0:
@@ -864,7 +866,7 @@ def update_all_occupancy():
             paint_diagonal(diag_name, "yellow")
             continue
         # 3) свободна -> чёрная
-        paint_diagonal(diag_name, "black")
+        paint_diagonal(diag_name, line_color_main)
     root.after(100, update_all_occupancy)
 
 #########################################        ПОДСВЕТКА МАРШРУТОВ               ##############################################
@@ -895,7 +897,7 @@ def highlight_possible_targets(start):
 
 def reset_node_selection():
     for name, item_id in node_ids.items():
-        canvas.itemconfig(item_id, fill="black", state="normal")
+        canvas.itemconfig(item_id, fill=line_color_main, state="normal")
     selected_nodes.clear()
 
 def disable_all_except_selected():
@@ -946,7 +948,7 @@ def on_leave(event):
         if len(selected_nodes) == 1:
             canvas.itemconfig(node_ids[name], fill="green")
         else:
-            canvas.itemconfig(node_ids[name], fill="black")
+            canvas.itemconfig(node_ids[name], fill=line_color_main)
 
 def switch_on_enter(event):
     name = get_switch_name_from_event(event)
@@ -954,7 +956,7 @@ def switch_on_enter(event):
 
 def switch_on_leave(event):
     name = get_switch_name_from_event(event)
-    canvas.itemconfig(switch_ids[name], fill="black")
+    canvas.itemconfig(switch_ids[name], fill=line_color_main)
 
 #########################################        КОНФЛИКТЫ МАРШРУТОВ ПОСТРОЕНИЕ НОВЫХ               ##############################################
 def next_route_id():
@@ -1087,12 +1089,12 @@ def release_route(route_id):
     for step in data["segments"]:
         if step["type"] == "segment":
             a, b = step["id"]
-            paint_segment((a,b), "black")
+            paint_segment((a,b), line_color_main)
 
             occupied_segments.discard((a,b))
             occupied_segments.discard((b, a))
         elif step["type"] == "diag":
-            paint_diagonal(step["name"], "black")
+            paint_diagonal(step["name"], line_color_main)
             occupied_diagonals.discard(step["name"])
     recalc_signals_to_red(route_id)
     del active_routes[route_id]
@@ -1119,10 +1121,10 @@ def blink_route(start, end, duration_ms=2000, interval_ms=200):
 
     def _step(state=True):
         if time.time() >= end_time:
-            paint_route(start, end, "black")
+            paint_route(start, end, line_color_main)
             return
 
-        color = "cyan" if state else "black"
+        color = "cyan" if state else line_color_main
         paint_route(start, end, color)
         root.after(interval_ms, _step, not state)
     _step(True)
@@ -1134,7 +1136,7 @@ def on_node_click(event):
 
     if name in selected_nodes:
         selected_nodes.remove(name)
-        canvas.itemconfig(node_ids[name], fill="black")
+        canvas.itemconfig(node_ids[name], fill=line_color_main)
         if len(selected_nodes) == 0:
             reset_node_selection()
         if len(selected_nodes) == 1:
@@ -1166,12 +1168,12 @@ def blink_diag(name, duration_ms=2000, interval_ms=200):
                     for part_name, lines in split_diag_ids[split_name].items():
                         logic_name = split_parts_map[split_name][part_name]
                         if logic_name in diag_ids:
-                                paint_diagonal(logic_name, "black")
+                                paint_diagonal(logic_name, line_color_main)
             else:
-                paint_diagonal(name, "black")
+                paint_diagonal(name, line_color_main)
             return
 
-        color = "cyan" if state else "black"
+        color = "cyan" if state else line_color_main
         if name in split_diag_ids:
             for split_name in split_diag_ids.keys():
                 for part_name, lines in split_diag_ids[split_name].items():
@@ -1467,10 +1469,11 @@ drawDeadEnd("beforeM6", "left", 0)
 bannedNames = ["pastM1", "beforeM6", "past2", "1STR", "past4", "M6H2", "M2H1_mid",
                "M8mid", "M2H1_third", "ALB_Sect1-2", "ALB_Sect1", "ALB_Sect2",
                "ALB_Sect0", "ALB_Sect1-2_2"]
+
 for name, (x, y) in positions.items():
     if name in bannedNames:
         continue
-    node = canvas.create_text(x, y - 25, text=name, tags=(f"node_{name}", "node"), font=("Bahnschrift SemiBold", 12))
+    node = canvas.create_text(x, y - 25, text=name, tags=(f"node_{name}", "node"), fill=line_color_main, font=("Bahnschrift SemiBold", 12))
     node_ids[name] = node
 
 #########################################        РИСУЕМ ВСЕ СВЕТОФОРЫ            ##############################################
@@ -1498,11 +1501,11 @@ def set_mode(mode):
 
     if btn_maneuver is not None and btn_train is not None:
         if mode == "maneuver":
-            btn_maneuver.config(bg="#65a167", fg="white")
-            btn_train.config(bg="#bf4343", fg="white")
+            btn_maneuver.config(bg="#3996D5", fg="white")
+            btn_train.config(bg="grey", fg="white")
         else:
-            btn_train.config(bg="#65a167", fg="white")
-            btn_maneuver.config(bg="#bf4343", fg="white")
+            btn_train.config(bg="#3996D5", fg="white")
+            btn_maneuver.config(bg="grey", fg="white")
 
     selected_nodes.clear()
     apply_mode_visuals()
@@ -1529,38 +1532,40 @@ canvas.tag_bind("switch", "<Enter>", switch_on_enter)
 canvas.tag_bind("switch", "<Leave>", switch_on_leave)
 
 # метка статуса Arduino
-arduino_status_label = tkinter.Label(root, text="Arduino: проверка...", fg="orange")
-arduino_status_label.place(x=360, y=20)
+arduino_status_label = tkinter.Label(root, text="Arduino: проверка...", fg="orange",  font=("Bahnschrift bold", 12))
+arduino_status_label.place(x=300, y=16)
 
 n = tkinter.StringVar()
-combobox1 = ttk.Combobox(root, width = 25, textvariable = n, state='readonly')
+combobox1 = ttk.Combobox(root, width = 25, textvariable = n, state='readonly', font=("Bahnschrift bold", 9))
 combobox1.place(x=510,y=20)
 
-button = tkinter.Button(root, text="Снести", command=snos)
-button.place(x=700, y=18)
-buttonAll = tkinter.Button(root, text="Убрать всё", command=snosAll)
-buttonAll.place(x=770, y=18)
-button = tkinter.Button(root, text="Проверка", command=check)
-button.place(x=860, y=18)
+button = tkinter.Button(root, text="Снести", command=snos, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10),)
+button.place(x=720, y=18)
+buttonAll = tkinter.Button(root, text="Убрать всё", command=snosAll, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
+buttonAll.place(x=790, y=18)
+button = tkinter.Button(root, text="Проверка", command=check, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
+button.place(x=880, y=18)
 
 buttons_y = CANVAS_H - 80
 
 btn_maneuver = tkinter.Button(
     root,
     text="МАНЕВРОВЫЕ",
-    font=("Bahnschrift Bold", 15),
-    bg="#65a167",
+    font=("Bahnschrift", 15),
+    bg="#3996D5",
     fg="white",
     width=15,
     height=2,
+    relief="flat",
     command=show_maneuver_routes
 )
 btn_train = tkinter.Button(
     root,
     text="ПОЕЗДНЫЕ",
-    font=("Bahnschrift Bold", 15),
-    bg="#bf4343",
+    font=("Bahnschrift", 15),
+    bg="grey",
     fg="white",
+    relief="flat",
     width=15,
     height=2,
     command=show_train_routes
@@ -1583,7 +1588,7 @@ def do(button_id):
         diag_occ_train[seg] = 1 if diag_occ_train[seg] == 0 else 0
 
 for i in range(18):
-    button69 = tkinter.Button(root, text=f"{[i]}", command=lambda id=i: do(id))
+    button69 = tkinter.Button(root, text=f"{[i]}", command=lambda id=i: do(id), relief="flat")
     button69.place(x=1220, y=40 + i * 25)
 
 
@@ -1595,4 +1600,5 @@ update_signals_visual_v2()  # новое (все сигналы)
 recalc_signals_to_red(None)
 root.protocol('WM_DELETE_WINDOW', quit_function)
 canvas.pack()
+
 root.mainloop()

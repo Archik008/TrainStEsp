@@ -649,6 +649,9 @@ def get_switch_state_num(name):
     else:
         return "-"
 
+
+
+
 def get_switch_state_color(name):
     mode = diagonal_modes.get(name)
     normal = default_switch_mode.get(name, "left")
@@ -683,9 +686,9 @@ def create_switch_table():
 
     for i, name in enumerate(switch_list, start=1):
         y = y_start + (i - 1) * dy
-        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12), tags=(f"switch_{name}", "switch"), fill=line_color_main)
+        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12), tags=(f"switch_{name}", "switch"), )
         switch_ids[name] = switch
-        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 12), fill=line_color_main)
+        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 12), )
 
         rect = canvas.create_rectangle(
             x_rect - 8, y - 8, x_rect + 8, y + 8,
@@ -702,6 +705,30 @@ def set_diagonal_mode(nameDiag, mode):
     update_switch_indicator(nameDiag)
 
 def blink_switches(diags, duration_ms=2000, interval_ms=200):
+    if not diags:
+        return
+
+    end_time = time.time() + duration_ms / 1000.0
+    final_colors = {d: get_switch_state_color(d) for d in diags}
+
+
+    def _step(state=True):
+        if time.time() >= end_time:
+            for d in diags:
+                rect = switch_indicator_ids.get(d)
+                if rect is not None:
+                    canvas.itemconfig(rect, fill=final_colors[d])
+            return
+
+        for d in diags:
+            rect = switch_indicator_ids.get(d)
+            if rect is not None:
+                canvas.itemconfig(rect, fill="cyan" if state else final_colors[d])
+        root.after(interval_ms, _step, not state)
+
+    _step(True)
+
+def blink_switches_table(diags, duration_ms=2000, interval_ms=200):
     if not diags:
         return
 
@@ -1160,7 +1187,6 @@ def on_node_click(event):
 def blink_diag(name, duration_ms=2000, interval_ms=200):
     blinking_diags.add(name)
     end_time = time.time() + duration_ms / 1000.0
-
     def _step(state=True):
         if time.time() >= end_time:
             if name in split_diag_ids:
@@ -1168,7 +1194,7 @@ def blink_diag(name, duration_ms=2000, interval_ms=200):
                     for part_name, lines in split_diag_ids[split_name].items():
                         logic_name = split_parts_map[split_name][part_name]
                         if logic_name in diag_ids:
-                                paint_diagonal(logic_name, line_color_main)
+                            paint_diagonal(logic_name, line_color_main)
             else:
                 paint_diagonal(name, line_color_main)
             return
@@ -1183,7 +1209,7 @@ def blink_diag(name, duration_ms=2000, interval_ms=200):
         else:
             paint_diagonal(name, color)
             root.after(interval_ms, _step, not state)
-        _step(True)
+    _step(True)
 
 global changingSwitches
 changingSwitches = False
@@ -1236,7 +1262,7 @@ def on_switch_mode_selected(name,mode):
         return
     changingSwitches = True
     blink_diag(name, duration_ms=2000, interval_ms=200)
-
+    blink_switches([name], duration_ms=2000, interval_ms=200)
     def finalize():
         global changingSwitches
         if mode == 0 and text != "+":

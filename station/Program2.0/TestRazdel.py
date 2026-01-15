@@ -6,9 +6,18 @@ from serial.tools import list_ports
 from tkinter import ttk
 from configs import *
 import ArduinoCode as AC
+
+REG_ORDER = "b2b1b0"  # варианты: "b2b1b0" или "b0b1b2"
+BIT_ORDER = "LSB"  # варианты: "MSB" или "LSB"
+print("ArduinoCode file:", AC.__file__)
+print("Has send_all_off:", hasattr(AC, "send_all_off"))
+print("Has send_hw_from_state:", hasattr(AC, "send_hw_from_state"))
+print("Has set_link_order:", hasattr(AC, "set_link_order"))
 import time
 from serial import SerialException
 from tkinter import messagebox
+
+rx_buf = bytearray()
 
 print("AC has:", hasattr(AC, "build_hw_frame_from_signals_state"))
 
@@ -18,17 +27,19 @@ canvas = tk.Canvas(root, width=1250, height=600, bg="white")
 
 
 def quit_function():
-    #response = tkinter.messagebox.askyesno('Exit', 'Are you sure you want to exit?')
-    #if response:
-        exit()
+    # response = tkinter.messagebox.askyesno('Exit', 'Are you sure you want to exit?')
+    # if response:
+    exit()
 
 
 CANVAS_W = 1200
 CANVAS_H = 600
 root.resizable(False, False)
 
+
 def showInfo(title, msg):
     showinfo(title=title, message=msg)
+
 
 #########################################        ФУНКЦИЯ ТУПИКОВ                ##############################################
 
@@ -41,6 +52,7 @@ def drawDeadEnd(name, direction, offset):
     elif direction == "left":
         canvas.create_line(x, y, x - offset, y, width=4, fill="black")
         canvas.create_line(x - offset, y - 15, x - offset, y + 15, width=6, fill="black")
+
 
 #########################################        МАССИВЫ ЭЛЕМЕНТОВ               ##############################################
 selected_nodes = []
@@ -111,9 +123,9 @@ signals_state = {
         "manual": False,
     },
     "M2": {
-            "lamps": {
-                "blue": {"on": True, "blink": False},
-                "white": {"on": False, "blink": False},
+        "lamps": {
+            "blue": {"on": True, "blink": False},
+            "white": {"on": False, "blink": False},
         },
         "manual": False,
     },
@@ -144,7 +156,7 @@ signals_state = {
         },
         "manual": False,
     },
-     "H4": {
+    "H4": {
         "lamps": {
             "yellow": {"on": False, "blink": False},
             "green": {"on": False, "blink": False},
@@ -214,9 +226,11 @@ SIGNAL_OFF_COLOR = "#202020"
 signal_blink_phase = False
 DEBUG_SIGNALS_FRAME = False
 
+
 def _indices_for_color(sig_name: str, color: str) -> list[int]:
     cols = signals_config[sig_name]["colors"]
     return [i for i, c in enumerate(cols) if c == color]
+
 
 def gui_lamps_for_aspect(sig_name: str, aspect: str) -> tuple[set[int], set[int]]:
     """
@@ -261,6 +275,7 @@ def gui_lamps_for_aspect(sig_name: str, aspect: str) -> tuple[set[int], set[int]
 
     return lit, blink
 
+
 def gui_lamps_from_state(sig_name: str) -> tuple[set[int], set[int]]:
     lit: set[int] = set()
     blink: set[int] = set()
@@ -302,9 +317,9 @@ def recalc_signals_to_red(rid) -> None:
         a = data.get("start")
         b = data.get("end")
         key = (a, b)
-       # if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
-            #print("Нет маршрута")
-            #return
+        # if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
+        # print("Нет маршрута")
+        # return
         cfg = ROUTE_SIGNAL_MAP.get(key)
         for name in cfg:
             if name in AdditionalSignals:
@@ -335,6 +350,25 @@ def recalc_signals_to_red(rid) -> None:
                 for colors in signals_state[name]["lamps"]:
                     signals_state[name]["lamps"][colors]["on"] = False
 
+
+def recompute_all_signals():
+    """
+    Полный пересчёт:
+      1) сбросить всё в дефолт (красные/синие)
+      2) применить ВСЕ активные маршруты заново
+    """
+    # 1) сброс дефолта для всех
+    recalc_signals_to_red(None)
+
+    # 2) применяем каждый активный маршрут
+    for rid, data in active_routes.items():
+        a = data.get("start")
+        b = data.get("end")
+        if not a or not b:
+            continue
+        recalc_signals_from_active_routes((a, b))
+
+
 def recalc_signals_from_active_routes(route):
     """
        # 2) применить активные маршруты
@@ -345,12 +379,12 @@ def recalc_signals_from_active_routes(route):
             continue
     """
     key = route
-        #if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
-            #print("recalc_signals_from_active_routes")
+    # if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
+    # print("recalc_signals_from_active_routes")
 
     cfg = ROUTE_SIGNAL_MAP.get(key)
-        #if not cfg:
-            #continue
+    # if not cfg:
+    # continue
 
     for name in cfg:
 
@@ -366,16 +400,67 @@ def recalc_signals_from_active_routes(route):
             signals_state[name]["lamps"][color]["blink"] = lamp_cfg.get("blink", False)
 
 
-def update_signals_visual_v2() -> None:
+def reset_signals_to_default() -> None:
+    AdditionalSignals = ["ALB_Sect1-2", "ALB_Sect1-2_2", "ALB_Sect2"]
 
+    for name in signals_state.keys():
+        if name in AdditionalSignals:
+            continue
+
+        # всё выключить
+        for lamp in signals_state[name]["lamps"].values():
+            lamp["on"] = False
+            lamp["blink"] = False
+
+        # дефолт: красный (или синий, если красного нет)
+        if "red" in signals_state[name]["lamps"]:
+            signals_state[name]["lamps"]["red"]["on"] = True
+        elif "blue" in signals_state[name]["lamps"]:
+            signals_state[name]["lamps"]["blue"]["on"] = True
+        # иначе остаётся всё выключено
+
+
+def apply_route_signals_by_key(key: tuple[str, str]) -> None:
+    cfg = ROUTE_SIGNAL_MAP.get(key)
+    if cfg is None:
+        cfg = ROUTE_SIGNAL_MAP.get((key[1], key[0]))
+    if cfg is None:
+        return
+
+    for sig_name in cfg:
+        if sig_name not in signals_state:
+            continue
+
+        # сбросить этот светофор перед применением
+        for lamp in signals_state[sig_name]["lamps"].values():
+            lamp["on"] = False
+            lamp["blink"] = False
+
+        for color, lamp_cfg in cfg[sig_name]["lamps"].items():
+            if color not in signals_state[sig_name]["lamps"]:
+                continue
+            signals_state[sig_name]["lamps"][color]["on"] = bool(lamp_cfg.get("on", False))
+            signals_state[sig_name]["lamps"][color]["blink"] = bool(lamp_cfg.get("blink", False))
+
+
+def recompute_signals_from_all_active_routes() -> None:
+    reset_signals_to_default()
+    for rid, data in active_routes.items():
+        a = data.get("start")
+        b = data.get("end")
+        if not a or not b:
+            continue
+        apply_route_signals_by_key((a, b))
+
+
+def update_signals_visual_v2() -> None:
     global signal_blink_phase
 
     # 2) (опционально) собрать байты в порядке signals_config — для отладки/будущей отправки в Arduino
     try:
-        hw = AC.build_hw_frame_from_signals_state(signals_state, blink_phase=signal_blink_phase)
-        AC.debug_print_hw_frame(hw)
+        AC.send_hw_from_state(signals_state, blink_phase=signal_blink_phase, debug=True)
     except Exception as e:
-        print("[HW] build error:", e)
+        print("[HW] send error:", e)
     # 3) покрасить все светофорыа
     for name in signals_config.keys():
         if name not in signal_ids:
@@ -389,7 +474,7 @@ def update_signals_visual_v2() -> None:
         blink_all = bool(st.get("blink", False))
 
         lit, blink = gui_lamps_from_state(name)
-        
+
         for idx, oid in enumerate(ids):
             is_lit = idx in lit
             is_blink = (idx in blink) or (blink_all and is_lit)
@@ -410,10 +495,11 @@ def update_signals_visual_v2() -> None:
         signals_state["ALB_Sect1-2_2"]["lamps"]["yellow"]["on"] = True
         signals_state["ALB_Sect1-2_2"]["lamps"]["green"]["on"] = False
     if signals_state["CH"]["lamps"]["yellow"]["on"] == True or signals_state["CH"]["lamps"]["yellow1"]["on"] == True:
-        signals_state["ALB_Sect1-2_2"]["lamps"]["yellow"]["on"] =False
+        signals_state["ALB_Sect1-2_2"]["lamps"]["yellow"]["on"] = False
         signals_state["ALB_Sect1-2_2"]["lamps"]["green"]["on"] = True
 
     root.after(350, update_signals_visual_v2)
+
 
 def format_routes(routes_dict):
     if not routes_dict:
@@ -427,6 +513,7 @@ def format_routes(routes_dict):
         lines.append(f"{a} \u2192 {b}")
     return "\n".join(lines)
 
+
 def show_maneuver_routes():
     global settingRoute
     if settingRoute == True:
@@ -434,6 +521,7 @@ def show_maneuver_routes():
     set_mode("maneuver")
     msg = "Маневровые маршруты:\n\n" + format_routes(routes)
     showInfo("МАНЕВРОВЫЕ", msg)
+
 
 def show_train_routes():
     global settingRoute
@@ -443,6 +531,7 @@ def show_train_routes():
     msg = "Поездные маршруты:\n\n" + format_routes(train_routes)
     showInfo("ПОЕЗДНЫЕ", msg)
 
+
 def make_signal_state(name, colors):
     signals_state[name] = {
         "lamps": {
@@ -450,6 +539,7 @@ def make_signal_state(name, colors):
             for color in colors
         }
     }
+
 
 #########################################       ОТРИСОВКА СВЕТОФОРОВ                ##############################################
 def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
@@ -490,6 +580,7 @@ def drawSignal(name, mount="bottom", pack_side="right", count=3, colors=None):
     make_signal_state(name, colors)
     signal_ids[name] = ids
 
+
 #########################################        ФУНКЦИИ МАРШРУТОВ                ##############################################
 def paint_diagonal(name, color):
     if name in split_diag_ids:
@@ -497,11 +588,13 @@ def paint_diagonal(name, color):
     for line_id in diag_ids[name]:
         canvas.itemconfig(line_id, fill=color)
 
+
 def paint_segment(key, color):
     seg_id = segment_ids.get(key)
     if seg_id is None:
         return
     canvas.itemconfig(seg_id, fill=color)
+
 
 def paint_route(start, end, color="yellow"):
     key = (start, end)
@@ -534,6 +627,7 @@ def paint_route(start, end, color="yellow"):
             else:
                 print("Неизвестный тип шага:", step)
 
+
 #########################################        ФУНКЦИИ ВКЛ/ОТКЛ СТРЕЛОК               ##############################################
 def setBranchRight(nameDiag, offset):
     if nameDiag in split_diag_ids.keys():
@@ -554,24 +648,26 @@ def setBranchRight(nameDiag, offset):
         x1, y1, x2, y2 = canvas.coords(diag_ids[nameDiag][2])
         canvas.coords(diag_ids[nameDiag][2], x1, y1 + offset, x2, y2)
 
+
 def setBranchLeft(nameDiag, offset):
     if nameDiag in split_diag_ids.keys():
-        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partA'][0])  #1
+        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partA'][0])  # 1
         canvas.coords(split_diag_ids[nameDiag]['partA'][0], x1, y1 + offset, x2, y2 + offset)
 
-        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partA'][1])   #3
+        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partA'][1])  # 3
         canvas.coords(split_diag_ids[nameDiag]['partA'][1], x1, y1 + offset, x2, y2)
 
-        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partB'][0])  #2
-        canvas.coords(split_diag_ids[nameDiag]['partB'][0], x1, y1, x2, y2- offset-1)
+        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partB'][0])  # 2
+        canvas.coords(split_diag_ids[nameDiag]['partB'][0], x1, y1, x2, y2 - offset - 1)
 
-        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partB'][1])  #4
-        canvas.coords(split_diag_ids[nameDiag]['partB'][1], x1, y1 - offset-1, x2, y2 - offset-1)
+        x1, y1, x2, y2 = canvas.coords(split_diag_ids[nameDiag]['partB'][1])  # 4
+        canvas.coords(split_diag_ids[nameDiag]['partB'][1], x1, y1 - offset - 1, x2, y2 - offset - 1)
     else:
         x1, y1, x2, y2 = canvas.coords(diag_ids[nameDiag][1])
         canvas.coords(diag_ids[nameDiag][1], x1, y1 + offset, x2, y2 + offset)
         x1, y1, x2, y2 = canvas.coords(diag_ids[nameDiag][2])
         canvas.coords(diag_ids[nameDiag][2], x1, y1, x2, y2 + offset)
+
 
 def branchWidth(namediag, width):
     if namediag in split_diag_ids.keys():
@@ -581,6 +677,7 @@ def branchWidth(namediag, width):
     else:
         for lines in range(len(diag_ids[(namediag)])):
             canvas.itemconfig(diag_ids[namediag][lines], width=width)
+
 
 def apply_diagonal_mode(nameDiag, mode):
     cfg = diagonal_config.get(nameDiag)
@@ -600,7 +697,7 @@ def apply_diagonal_mode(nameDiag, mode):
             branchWidth(nameDiag, 2)
             if nameDiag == "ALB_Turn2":
                 canvas.itemconfig(segment_ids[("M2H1_mid", "M2H1_third")], width=2)
-                #canvas.itemconfig(segment_ids[("H1", "M2H1_third")], width=2)
+                # canvas.itemconfig(segment_ids[("H1", "M2H1_third")], width=2)
 
     right_cfg = cfg["right"]
     if right_cfg["exists"]:
@@ -630,6 +727,7 @@ def apply_diagonal_mode(nameDiag, mode):
             if nameDiag == "ALB_Turn1":
                 canvas.itemconfig(segment_ids[("M8mid", "M8")], width=6)
 
+
 def get_switch_state_num(name):
     mode = diagonal_modes.get(name)
     normal = default_switch_mode.get(name, "left")
@@ -640,15 +738,17 @@ def get_switch_state_num(name):
     else:
         return "-"
 
+
 def get_switch_state_color(name):
     mode = diagonal_modes.get(name)
     normal = default_switch_mode.get(name, "left")
     if mode is None:
         return "grey"
     if mode == normal:
-        return "green"    # плюс, нормальное положение
+        return "green"  # плюс, нормальное положение
     else:
-        return "yellow"   # переведена
+        return "yellow"  # переведена
+
 
 def update_switch_indicator(name):
     rect = switch_indicator_ids.get(name)
@@ -659,6 +759,7 @@ def update_switch_indicator(name):
     text = get_switch_state_num(name)
     canvas.itemconfig(rect, fill=color)
     canvas.itemconfig(labelSwitch, text=text)
+
 
 #########################################  МИНИ-Таблица стрелок (правый нижний угол)  #########################################
 def create_switch_table():
@@ -674,9 +775,10 @@ def create_switch_table():
 
     for i, name in enumerate(switch_list, start=1):
         y = y_start + (i - 1) * dy
-        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12), tags=(f"switch_{name}", "switch"))
+        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12),
+                                    tags=(f"switch_{name}", "switch"))
         switch_ids[name] = switch
-        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 12))
+        label = canvas.create_text(x_rect - 30, y + 1, text="0", font=("Bahnschrift SemiBold", 12))
 
         rect = canvas.create_rectangle(
             x_rect - 8, y - 8, x_rect + 8, y + 8,
@@ -685,12 +787,16 @@ def create_switch_table():
         switch_text_ids[name] = label
         switch_indicator_ids[name] = rect
         update_switch_indicator(name)
+
+
 create_switch_table()
+
 
 def set_diagonal_mode(nameDiag, mode):
     apply_diagonal_mode(nameDiag, mode)
     diagonal_modes[nameDiag] = mode
     update_switch_indicator(nameDiag)
+
 
 def blink_switches(diags, duration_ms=2000, interval_ms=200):
     if not diags:
@@ -715,6 +821,7 @@ def blink_switches(diags, duration_ms=2000, interval_ms=200):
 
     _step(True)
 
+
 #########################################        СТРЕЛКИ/ДИАГОНАЛИ               ##############################################
 
 def AddDiagonal(x1, y1, x2, y2, offsetleft, offsetright, nameDiag):
@@ -723,8 +830,9 @@ def AddDiagonal(x1, y1, x2, y2, offsetleft, offsetright, nameDiag):
     l3 = canvas.create_line(x1, y1, x2, y2, width=3, fill="black")
     diag_ids[(nameDiag)] = [l1, l2, l3]
 
+
 def AddSplitDiagonal(x1, y1, x2, y2,
-                     x3, y3,offset_left,
+                     x3, y3, offset_left,
                      offset_right, nameDiag, namePart1, namePart2):
     l2 = canvas.create_line(x1, y1, x2, y2, width=3, fill="black")
     l3 = canvas.create_line(x2, y2, x3, y3, width=3, fill="black")
@@ -736,6 +844,7 @@ def AddSplitDiagonal(x1, y1, x2, y2,
     }
     diag_ids[(namePart1)] = [l1, l2]
     diag_ids[(namePart2)] = [l3, l4]
+
 
 #########################################       ЛИНИИ              ##############################################
 for a, b in segments:
@@ -749,13 +858,14 @@ for a, b in segments:
 AddDiagonal(260, 330, 350, 430, 20, 38, "ALB_Turn2")
 AddDiagonal(965, 330, 890, 430, -22, -37, "ALB_Turn1")
 AddDiagonal(560, 130, 470, 230, -57, -20, "ALB_Turn8")
-AddSplitDiagonal(430, 230, 390, 280,350, 330, -30, -30, "ALB_Turn4-6", "ALB_Turn4", "ALB_Turn6")
+AddSplitDiagonal(430, 230, 390, 280, 350, 330, -30, -30, "ALB_Turn4-6", "ALB_Turn4", "ALB_Turn6")
 
 # начальное положение стрелок
 set_diagonal_mode("ALB_Turn1", "left")
 set_diagonal_mode("ALB_Turn2", "left")
 set_diagonal_mode("ALB_Turn8", "left")
 set_diagonal_mode("ALB_Turn4-6", "left")
+
 
 def check_if_route_finished(seg, rev, diag):
     for rid in list(active_routes.keys()):
@@ -787,6 +897,7 @@ part_to_split = {}
 for split_name in split_parts_map:
     for part, logic_name in split_parts_map[split_name].items():
         part_to_split[logic_name] = (split_name, part)
+
 
 def update_all_occupancy():
     for seg in seg_occ_train:
@@ -842,11 +953,11 @@ def update_all_occupancy():
                     continue
             paint_segment(s, "black")
 
-        if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0 :
-            paint_segment((a,b), "red")
+        if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
+            paint_segment((a, b), "red")
             continue
         if (a, b) in occupied_segments or (b, a) in occupied_segments:
-            paint_segment((a,b), "yellow")
+            paint_segment((a, b), "yellow")
             continue
 
         paint_segment((a, b), "black")
@@ -861,6 +972,7 @@ def update_all_occupancy():
         # 3) свободна -> чёрная
         paint_diagonal(diag_name, "black")
     root.after(100, update_all_occupancy)
+
 
 #########################################        ПОДСВЕТКА МАРШРУТОВ               ##############################################
 def highlight_possible_targets(start):
@@ -888,10 +1000,12 @@ def highlight_possible_targets(start):
     for name in possible:
         canvas.itemconfig(f"node_{name}", state="normal")
 
+
 def reset_node_selection():
     for name, item_id in node_ids.items():
         canvas.itemconfig(item_id, fill="black", state="normal")
     selected_nodes.clear()
+
 
 def disable_all_except_selected():
     for name, item in node_ids.items():
@@ -899,6 +1013,7 @@ def disable_all_except_selected():
             canvas.itemconfig(item, state="normal")
         else:
             canvas.itemconfig(item, fill="grey", state="disabled")
+
 
 #########################################        ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ УЗЛОВ      ##############################################
 def get_node_name_from_event(event):
@@ -914,6 +1029,7 @@ def get_node_name_from_event(event):
             return t.replace("node_", "")
     return None
 
+
 def get_switch_name_from_event(event):
     items = canvas.find_withtag("current")
     if not items:
@@ -925,6 +1041,7 @@ def get_switch_name_from_event(event):
             return t.replace("switch_", "")
     return None
 
+
 def on_enter(event):
     name = get_node_name_from_event(event)
     if name is None:
@@ -932,6 +1049,7 @@ def on_enter(event):
 
     if name not in selected_nodes:
         canvas.itemconfig(node_ids[name], fill="#e01dcd")
+
 
 def on_leave(event):
     name = get_node_name_from_event(event)
@@ -943,13 +1061,16 @@ def on_leave(event):
         else:
             canvas.itemconfig(node_ids[name], fill="black")
 
+
 def switch_on_enter(event):
     name = get_switch_name_from_event(event)
     canvas.itemconfig(switch_ids[name], fill="pink")
 
+
 def switch_on_leave(event):
     name = get_switch_name_from_event(event)
     canvas.itemconfig(switch_ids[name], fill="black")
+
 
 #########################################        КОНФЛИКТЫ МАРШРУТОВ ПОСТРОЕНИЕ НОВЫХ               ##############################################
 def next_route_id():
@@ -958,8 +1079,10 @@ def next_route_id():
     route_counter += 1
     return rid
 
+
 global settingRoute
 settingRoute = False
+
 
 def get_route(start, end):
     if current_mode == "maneuver":
@@ -972,6 +1095,7 @@ def get_route(start, end):
         if key in train_routes:
             return train_routes[key]
         return None
+
 
 def has_switch_conflict(a, b):
     """
@@ -1012,67 +1136,71 @@ def has_switch_conflict(a, b):
 
     return False
 
+
 def check_route_conflict(start, end):
     if current_mode == "maneuver":
         if has_switch_conflict(start, end):
             return True
-        for step in routes.get((start,end)):
+        for step in routes.get((start, end)):
             if step["type"] == "segment":
                 a, b = step["id"]
-                if step["id"] in occupied_segments or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
+                if step["id"] in occupied_segments or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a),
+                                                                                                             1) == 0:
                     return True
             elif step["type"] == "diag":
-                if step["name"] in occupied_diagonals or diag_occ_train.get(step["name"],1) == 0:
+                if step["name"] in occupied_diagonals or diag_occ_train.get(step["name"], 1) == 0:
                     return True
         return False
     if current_mode == "train":
         if has_switch_conflict(start, end):
             return True
-        for step in train_routes.get((start,end)):
+        for step in train_routes.get((start, end)):
             if step["type"] == "segment":
                 a, b = step["id"]
-                if step["id"] in occupied_segments or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
+                if step["id"] in occupied_segments or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a),
+                                                                                                             1) == 0:
                     return True
             elif step["type"] == "diag":
-                if step["name"] in occupied_diagonals or diag_occ_train.get(step["name"],1) == 0:
+                if step["name"] in occupied_diagonals or diag_occ_train.get(step["name"], 1) == 0:
                     return True
         return False
 
-def register_route(start, end):
 
+def register_route(start, end):
     global route_counter
     rid = route_counter
     route_counter += 1
     if current_mode == "maneuver":
-        for step in routes.get((start,end)):
+        for step in routes.get((start, end)):
             if step["type"] == "segment":
                 a, b = step["id"]
-                occupied_segments.add((a,b))
-                occupied_segments.add((b,a))
+                occupied_segments.add((a, b))
+                occupied_segments.add((b, a))
             elif step["type"] == "diag":
                 occupied_diagonals.add(step["name"])
 
         active_routes[rid] = {
             "start": start,
             "end": end,
-            "segments": routes.get((start,end)),
+            "segments": routes.get((start, end)),
         }
         return rid
     if current_mode == "train":
-        for step in train_routes.get((start,end)):
+        for step in train_routes.get((start, end)):
             if step["type"] == "segment":
                 a, b = step["id"]
-                occupied_segments.add((a,b))
-                occupied_segments.add((b,a))
+                occupied_segments.add((a, b))
+                occupied_segments.add((b, a))
             elif step["type"] == "diag":
                 occupied_diagonals.add(step["name"])
 
         active_routes[rid] = {
             "start": start,
             "end": end,
-            "segments": train_routes.get((start,end)),
+            "segments": train_routes.get((start, end)),
         }
         return rid
+
 
 def release_route(route_id):
     global route_counter
@@ -1082,17 +1210,18 @@ def release_route(route_id):
     for step in data["segments"]:
         if step["type"] == "segment":
             a, b = step["id"]
-            paint_segment((a,b), "black")
+            paint_segment((a, b), "black")
 
-            occupied_segments.discard((a,b))
+            occupied_segments.discard((a, b))
             occupied_segments.discard((b, a))
         elif step["type"] == "diag":
             paint_diagonal(step["name"], "black")
             occupied_diagonals.discard(step["name"])
-    recalc_signals_to_red(route_id)
     del active_routes[route_id]
-
+    recompute_all_signals()
+    recompute_signals_from_all_active_routes()
     comboboxDelete(route_id)
+
 
 #########################################        МИГАНИЕ МАРШРУТА               ##############################################
 def is_segment_in_blinking_route(seg):
@@ -1103,13 +1232,13 @@ def is_segment_in_blinking_route(seg):
             continue
         for step in route:
             if step.get("type") == "segment":
-                if step["id"] == (a,b) or step["id"] == (b,a):
+                if step["id"] == (a, b) or step["id"] == (b, a):
                     return True
     return False
 
-def blink_route(start, end, duration_ms=2000, interval_ms=200):
 
-    blinking_routes.add((start,end))
+def blink_route(start, end, duration_ms=2000, interval_ms=200):
+    blinking_routes.add((start, end))
     end_time = time.time() + duration_ms / 1000.0
 
     def _step(state=True):
@@ -1120,7 +1249,10 @@ def blink_route(start, end, duration_ms=2000, interval_ms=200):
         color = "cyan" if state else "black"
         paint_route(start, end, color)
         root.after(interval_ms, _step, not state)
+
     _step(True)
+
+
 #########################################        ОБРАБОТКА КЛИКА ПО УЗЛУ          ##############################################
 def on_node_click(event):
     name = get_node_name_from_event(event)
@@ -1151,6 +1283,7 @@ def on_node_click(event):
         disable_all_except_selected()
         on_two_nodes_selected(first, second)
 
+
 def blink_diag(name, duration_ms=2000, interval_ms=200):
     blinking_diags.add(name)
     end_time = time.time() + duration_ms / 1000.0
@@ -1162,7 +1295,7 @@ def blink_diag(name, duration_ms=2000, interval_ms=200):
                     for part_name, lines in split_diag_ids[split_name].items():
                         logic_name = split_parts_map[split_name][part_name]
                         if logic_name in diag_ids:
-                                paint_diagonal(logic_name, "black")
+                            paint_diagonal(logic_name, "black")
             else:
                 paint_diagonal(name, "black")
             return
@@ -1179,10 +1312,12 @@ def blink_diag(name, duration_ms=2000, interval_ms=200):
             root.after(interval_ms, _step, not state)
         _step(True)
 
+
 global changingSwitches
 changingSwitches = False
 
-def on_switch_mode_selected(name,mode):
+
+def on_switch_mode_selected(name, mode):
     text = canvas.itemcget(switch_text_ids[name], "text")
     global settingRoute
     global changingSwitches
@@ -1195,8 +1330,9 @@ def on_switch_mode_selected(name,mode):
 
     textALB4_6 = canvas.itemcget(switch_text_ids["ALB_Turn4-6"], "text")
     ALB_Turn1banned = [("M8mid", "M8"), ("M8", "M8_mid")]
-    ALB_Turn8banned = [("M6", "M6H2"), ("H2", "M6H2"),("M6H2", "M6") ,("M6H2", "H2")]
-    ALB_Turn4_6banned = [("M2", "M2H1_mid"), ("M2H1_mid", "M2"), ("M6", "M6H2"), ("M6H2", "M6"), ("H2", "M6H2"), ("M6H2", "H2")]
+    ALB_Turn8banned = [("M6", "M6H2"), ("H2", "M6H2"), ("M6H2", "M6"), ("M6H2", "H2")]
+    ALB_Turn4_6banned = [("M2", "M2H1_mid"), ("M2H1_mid", "M2"), ("M6", "M6H2"), ("M6H2", "M6"), ("H2", "M6H2"),
+                         ("M6H2", "H2")]
     ALB_Turn2banned = [("M2", "M2H1_mid"), ("M2H1_mid", "M2")]
 
     for num in active_routes:
@@ -1244,7 +1380,9 @@ def on_switch_mode_selected(name,mode):
         else:
             changingSwitches = False
             return
+
     root.after(2100, finalize)
+
 
 def on_switch_click(event):
     name = get_switch_name_from_event(event)
@@ -1259,12 +1397,14 @@ def on_switch_click(event):
     )
     menu.tk_popup(event.x_root, event.y_root)
 
+
 #########################################        ФУНКЦИЯ ПРИ ВЫБОРЕ ДВУХ ТОЧЕК   ##############################################
 def visualSwitch(key):
     list = [("M2", "H1"), ("M2", "M8"), ("M2", "M1"), ("H1", "M2"), ("M1", "M2")]
     needRoutes = [('H1', 'M2H1_third')]
     if key in list:
         canvas.itemconfig(segment_ids[needRoutes[0]], width=6)
+
 
 def on_two_nodes_selected(a, b):
     global last_switch_check
@@ -1286,7 +1426,7 @@ def on_two_nodes_selected(a, b):
         reset_node_selection()
         return
 
-    route_cfg = route_switch_modes[key]   # только нужные стрелки для ЭТОГО маршрута
+    route_cfg = route_switch_modes[key]  # только нужные стрелки для ЭТОГО маршрута
     last_switch_check = {}
     changed = []
     main_diag = None  # какая стрелка будет мигать в табличке
@@ -1325,6 +1465,7 @@ def on_two_nodes_selected(a, b):
 
     reset_node_selection()
     visualSwitch(key)
+
     def finalize():
         rid = register_route(a, b)
         paint_route(a, b, "yellow")
@@ -1333,13 +1474,16 @@ def on_two_nodes_selected(a, b):
         current_values = list(combobox1["values"])
         current_values.append(rid)
         combobox1["values"] = tuple(current_values)
-        recalc_signals_from_active_routes((a,b))
+        recompute_signals_from_all_active_routes()
+
     root.after(2100, finalize)
+
 
 def comboboxDelete(ids):
     options = list(combobox1['values'])
     options.remove(str(ids))
     combobox1["values"] = options
+
 
 def snos():
     selected_item = combobox1.get()
@@ -1349,18 +1493,21 @@ def snos():
     release_route(num)
     combobox1.set('')
 
+
 def snosAll():
     for active in list(active_routes.keys()):
         release_route(active)
     combobox1.set('')
 
+
 def check():
     print("Активные маршруты")
     print(active_routes)
 
+
 def init_arduino():
-   # Поиск порта и подключение к Arduino.
-    
+    # Поиск порта и подключение к Arduino.
+
     global arduino, arduino_status_label
 
     try:
@@ -1377,8 +1524,15 @@ def init_arduino():
             # ПОДСТАВЬ СВОЙ ПОРТ (например "COM3" или "/dev/ttyACM0")
             arduino_port = "COM3"
 
-        arduino = serial.Serial(arduino_port, 9600, timeout=1)
-        time.sleep(2)  # дать Arduino перезапуститься
+        arduino = serial.Serial(arduino_port, 9600, timeout=0)  # <-- 115200 как в Arduino
+        time.sleep(2)
+
+        global ser
+        ser = arduino  # <-- вот это главное: ser теперь реальный порт
+        AC.ser = ser
+        AC.set_link_order(REG_ORDER, BIT_ORDER)
+
+        ser.write(b'A')  # должна дернуться стрелка M1M10 (по твоему handleCommand)
 
         print(f"Arduino подключен к {arduino_port}")
         if arduino_status_label is not None:
@@ -1390,6 +1544,7 @@ def init_arduino():
         if arduino_status_label is not None:
             arduino_status_label.config(text="Arduino: нет соединения", fg="red")
 
+
 def set_arduino_status(connected: bool, text: str = ""):
     if connected:
         arduino_status_label.config(text=f"Arduino: {text}", bg="green", fg="black")
@@ -1398,22 +1553,87 @@ def set_arduino_status(connected: bool, text: str = ""):
 
 
 def poll_arduino():
-    global ser
+    global ser, rx_buf
     if ser is not None and ser.is_open:
         try:
-            data = ser.read(1)  # один байт = 8 кнопок
+            rx_buf += ser.read(64)
         except SerialException as e:
             print(f"Ошибка чтения из Arduino: {e}")
             ser = None
             set_arduino_status(False)
             root.after(2000, init_arduino)
-        else:
-            if data:
-                val = data[0]
-                bits = bytes_to_bits(data, bits_needed=len(SEGMENT_ORDER))
+            return
+
+        while True:
+            if len(rx_buf) < 1:
+                break
+
+            tag = rx_buf[0]
+
+            # Кнопки: K + 1 байт
+            if tag == ord('K'):
+                if len(rx_buf) < 2:
+                    break
+                btn = rx_buf[1]
+                del rx_buf[:2]
+
+                bits = bytes_to_bits(bytes([btn]), bits_needed=len(SEGMENT_ORDER))
                 apply_bits_to_segments(bits)
+                continue
+
+            # ACK: O + 3 байта
+            if tag == ord('O'):
+                if len(rx_buf) < 4:
+                    break
+                ack = bytes(rx_buf[:4])
+                del rx_buf[:4]
+                # print("ACK:", ack)  # если надо
+                continue
+
+            # fallback: старый режим "сырой 1 байт кнопок" (если нет K-префикса)
+            # Если байт не похож на буквы протокола — считаем кнопками.
+            if tag not in (ord('K'), ord('O'), ord('L')):
+                btn = rx_buf[0]
+                del rx_buf[:1]
+                bits = bytes_to_bits(bytes([btn]), bits_needed=len(SEGMENT_ORDER))
+                apply_bits_to_segments(bits)
+                continue
+
+            # мусор/текст/остатки — выкинуть 1 байт
+            del rx_buf[:1]
 
     root.after(20, poll_arduino)
+
+
+def bytes_to_bits(data: bytes, bits_needed: int) -> list[int]:
+    bits: list[int] = []
+    for byte in data:
+        for bit_index in range(8):
+            bits.append((byte >> bit_index) & 1)
+            if len(bits) >= bits_needed:
+                return bits
+    while len(bits) < bits_needed:
+        bits.append(0)
+    return bits
+
+
+def apply_bits_to_segments(bits: list[int]) -> None:
+    """
+    Применяем биты от Arduino к занятости.
+    Предположение: bit=1 значит "занято" (у тебя занято = 0), bit=0 значит "свободно" (1).
+    Если окажется наоборот — просто поменяй местами 0 и 1 в присваивании.
+    """
+    for i, bit in enumerate(bits):
+        if i >= len(SEGMENT_ORDER):
+            break
+
+        item = SEGMENT_ORDER[i]
+
+        # SEGMENT_ORDER должен содержать либо tuple(a,b) для сегментов, либо str для диагоналей
+        if isinstance(item, tuple) and len(item) == 2:
+            seg_occ_train[item] = 0 if bit == 1 else 1
+        else:
+            diag_occ_train[item] = 0 if bit == 1 else 1
 
 
 def find_arduino_port():
@@ -1428,6 +1648,7 @@ def find_arduino_port():
         return ports[0].device
     print("COM-порты не найдены вообще.")
     return None
+
 
 """
 def init_arduino(port=None, baudrate=9600):
@@ -1477,6 +1698,8 @@ for name, cfg in signals_config.items():
         cfg["count"],
         cfg.get("colors")
     )
+
+
 #########################################        ВИЗУАЛ РЕЖИМА                    ##############################################
 def apply_mode_visuals():
     for name, item_id in node_ids.items():
@@ -1486,6 +1709,7 @@ def apply_mode_visuals():
             color = "grey"
             state = "disabled"
         canvas.itemconfig(item_id, fill=color, state=state)
+
 
 def set_mode(mode):
     global current_mode
@@ -1502,6 +1726,7 @@ def set_mode(mode):
     selected_nodes.clear()
     apply_mode_visuals()
 
+
 #########################################        БИНДЫ И НАЧАЛЬНАЯ ОКРАСКА        ##############################################
 canvas.tag_bind("node", "<Button-1>", on_node_click)
 canvas.tag_bind("node", "<Enter>", on_enter)
@@ -1516,8 +1741,8 @@ arduino_status_label = tkinter.Label(root, text="Arduino: проверка...", 
 arduino_status_label.place(x=360, y=20)
 
 n = tkinter.StringVar()
-combobox1 = ttk.Combobox(root, width = 25, textvariable = n, state='readonly')
-combobox1.place(x=510,y=20)
+combobox1 = ttk.Combobox(root, width=25, textvariable=n, state='readonly')
+combobox1.place(x=510, y=20)
 
 button = tkinter.Button(root, text="Снести", command=snos)
 button.place(x=700, y=18)
@@ -1555,6 +1780,7 @@ offset = 140
 btn_maneuver.place(x=center_x - offset - 80, y=buttons_y)
 btn_train.place(x=center_x + offset - 80, y=buttons_y)
 
+
 def do(button_id):
     if button_id >= 0 and button_id < 13:
         keys = list(seg_occ_train.keys())
@@ -1562,16 +1788,20 @@ def do(button_id):
         seg_occ_train[seg] = 1 if seg_occ_train[seg] == 0 else 0
     else:
         keys = list(diag_occ_train.keys())
-        seg = keys[button_id-13]
+        seg = keys[button_id - 13]
         diag_occ_train[seg] = 1 if diag_occ_train[seg] == 0 else 0
+
 
 for i in range(18):
     button69 = tkinter.Button(root, text=f"{[i]}", command=lambda id=i: do(id))
     button69.place(x=1220, y=40 + i * 25)
 
-
 #########################################        ЗАПУСК ЦИКЛОВ                    ##############################################         # порт ищется автоматически
 init_arduino()
+REG_ORDER = "b2b1b0"  # или "b0b1b2"
+BIT_ORDER = "LSB"  # или "LSB"
+AC.send_all_off()  # должно всё выключить
+time.sleep(0.3)
 poll_arduino()
 update_all_occupancy()
 update_signals_visual_v2()  # новое (все сигналы)

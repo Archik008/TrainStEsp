@@ -300,19 +300,23 @@ def invite_signal_on_off(signalName):
         signals_state[signalName]["lamps"]["white"]["on"] = True
 
 
-def is_signal_used_by_other_routes(exclude_rid):
+def is_signal_used_by_other_routes(signal_name, exclude_rid):
     for other_rid, data in active_routes.items():
         if other_rid == exclude_rid:
             continue
-        for data in active_routes[other_rid]["segments"]:
-            if data['type'] == 'segment':
-                segment = data['id']
+        for data_in_segment in active_routes[other_rid]["segments"]:
+            if data_in_segment['type'] == 'segment':
+                segment = data_in_segment['id']
                 if any(segment == seg for seg in segment_to_signal):
-                    return True
-            elif data['type'] == 'diag':
-                diag = data['name']
+                    signal_cfg = segment_to_signal[segment]
+                    if signal_name == signal_cfg:
+                        return True
+            elif data_in_segment['type'] == 'diag':
+                diag = data_in_segment['name']
                 if any(diag == diagonal for diagonal in diag_to_signal):
-                    return True
+                    diag_cfg = diag_to_signal[diag]
+                    if signal_name == diag_cfg:
+                        return True
     return False
 
 
@@ -331,7 +335,7 @@ def recalc_signals_to_red(rid) -> None:
         for name in cfg:
                 if name in AdditionalSignals:
                     continue
-                if is_signal_used_by_other_routes(rid):
+                if is_signal_used_by_other_routes(name, rid):
                     continue
                 for lamp_name, lamp in signals_state[name]["lamps"].items():
                     if lamp_name == "white" and name == "CH":

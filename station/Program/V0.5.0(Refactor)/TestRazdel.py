@@ -280,7 +280,7 @@ class SignalManager():
         if self.get_lamp_state(signalName, 'white'):
             self.set_signal(signalName, 'white', onStatus=False, blink=False)
         elif not self.get_lamp_state(signalName, 'white'):
-            self.set_signal(signalName, 'white', onStatus=True, blink=False)
+            self.set_signal(signalName, 'white', onStatus=True, blink=True)
 
     def is_signal_used_by_other_routes(self, signal_name, exclude_rid):
         for other_rid, data in route_manager.get_active_routes_items():
@@ -387,7 +387,7 @@ class SignalManager():
 
 
     def on_CH_click(self, event):
-        name = self.get_node_name_from_event(event)
+        name = interface_manager.get_node_name_from_event(event)
         if name == "CH":
             menu = tk.Menu(root, tearoff=0)
             menu.add_command(
@@ -707,7 +707,7 @@ class RouteManager:
                     occupied_segments.add(((a, b), rid))
                     occupied_segments.add(((b, a), rid))
                 elif step["type"] == "diag":
-                    occupied_diagonals.add(step["name"])
+                    occupied_diagonals.add((step["name"], rid))
 
             self.active_routes[rid] = {
                 "start": start,
@@ -761,7 +761,12 @@ class SwitchManager:
 
     def on_switch_mode_selected(self, name, mode):
         text = canvas.itemcget(switch_text_ids[name], "text")
-
+        if mode == 0 and text == "+":
+            messagebox.showinfo("Switch Mode", "Стрелка уже в положении '+'")
+            return
+        elif mode == 1 and text == "-":
+            messagebox.showinfo("Switch Mode", "Стрелка уже в положении '-'")
+            return
         if self.changingSwitches:
             self.interface_manager.showInfo("Ошибка", "Одна из стерок меняется!")
             return
@@ -960,7 +965,7 @@ class interface_manager:
         self.route_manager.set_mode("maneuver")
         self.route_manager.check_visual_mode()
         msg = "Маневровые маршруты:\n\n" + self.format_routes(routes)
-        self.showInfo("МАНЕВРОВЫЕ", msg)
+        #self.showInfo("МАНЕВРОВЫЕ", msg)
 
     def show_train_routes(self):
         if switch_manager.is_settingRoute():
@@ -968,7 +973,7 @@ class interface_manager:
         self.route_manager.set_mode("train")
         self.route_manager.check_visual_mode()
         msg = "Поездные маршруты:\n\n" + self.format_routes(train_routes)
-        self.showInfo("ПОЕЗДНЫЕ", msg)
+        #self.showInfo("ПОЕЗДНЫЕ", msg)
 
     def setBranchRight(self, nameDiag, offset):
         if nameDiag in split_diag_ids.keys():
@@ -1435,11 +1440,11 @@ def get_switch_state_color(name):
     mode = diagonal_modes.get(name)
     normal = default_switch_mode.get(name, "left")
     if mode is None:
-        return "grey"
+        return "red" # неизвестный режим
     if mode == normal:
-        return "green"    # плюс, нормальное положение
+        return "#538c65"    # плюс, нормальное положение
     else:
-        return "yellow"   # переведена
+        return "#71a2bd"   # переведена
 
 def update_switch_indicator(name):
     rect = switch_indicator_ids.get(name)
@@ -1522,7 +1527,7 @@ def blink_switches_table(diags, duration_ms=2000, interval_ms=200):
         for d in diags:
             rect = switch_indicator_ids.get(d)
             if rect is not None:
-                canvas.itemconfig(rect, fill="cyan" if state else final_colors[d])
+                canvas.itemconfig(rect, fill="#4c86a6" if state else final_colors[d])
         root.after(interval_ms, _step, not state)
 
     _step(True)
@@ -1609,7 +1614,7 @@ def blink_route(start, end, duration_ms=2000, interval_ms=200):
             interface_manager.paint_route(start, end, interface_manager.line_color_main)
             return
 
-        color = "cyan" if state else interface_manager.line_color_main
+        color = "#4c86a6" if state else interface_manager.line_color_main
         interface_manager.paint_route(start, end, color)
         root.after(interval_ms, _step, not state)
     _step(True)
@@ -1617,36 +1622,27 @@ def blink_route(start, end, duration_ms=2000, interval_ms=200):
 
 
 def blink_diag(name, duration_ms=2000, interval_ms=200):
+    print(name)
     blinking_diags.add(name)
     end_time = time.time() + duration_ms / 1000.0
+
     def _step(state=True):
         if time.time() >= end_time:
-            if name in split_diag_ids:
-                for split_name in split_diag_ids.keys():
-                    for part_name, lines in split_diag_ids[split_name].items():
-                        logic_name = split_parts_map[split_name][part_name]
-                        if logic_name in diag_ids:
-                            interface_manager.paint_diagonal(logic_name, interface_manager.line_color_main)
+            if name == "ALB_Turn4-6":
+                interface_manager.paint_diagonal("ALB_Turn4", interface_manager.line_color_main)
+                interface_manager.paint_diagonal("ALB_Turn6", interface_manager.line_color_main)
             else:
                 interface_manager.paint_diagonal(name, interface_manager.line_color_main)
             return
 
-        color = "cyan" if state else interface_manager.line_color_main
-        if name in split_diag_ids:
-            for split_name in split_diag_ids.keys():
-                for part_name, lines in split_diag_ids[split_name].items():
-                    logic_name = split_parts_map[split_name][part_name]
-                    if logic_name in diag_ids:
-                        interface_manager.paint_diagonal(logic_name, color)
+        color = "#4c86a6" if state else interface_manager.line_color_main
+        if name == "ALB_Turn4-6":
+            interface_manager.paint_diagonal("ALB_Turn4", color)
+            interface_manager.paint_diagonal("ALB_Turn6", color)
         else:
             interface_manager.paint_diagonal(name, color)
-            root.after(interval_ms, _step, not state)
+        root.after(interval_ms, _step, not state)
     _step(True)
-
-
-
-
-
 
 def checkOccupied():
     print(occupied_segments)
@@ -1724,20 +1720,6 @@ def find_arduino_port():
     return None
 
 
-
-#
-# for name, cfg in signals_config_simple.items():
-#     drawSignal(
-#         20,
-#         name,
-#         cfg["mount"],
-#         cfg["pack_side"],
-#         cfg["count"],
-#         cfg.get("colors"),
-#     )
-#
-
-
 def signal_visual_change():
     pass
 #########################################        БИНДЫ И НАЧАЛЬНАЯ ОКРАСКА        ##############################################
@@ -1758,8 +1740,6 @@ combobox1.place(x=510,y=20)
 button_visual_change = tkinter.Button(root, text="Упрощённый: вкл", command=signal_visual_change, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
 button_visual_change.place(x=960, y=18)
 buttons_y = CANVAS_H - 80
-
-
 
 center_x = CANVAS_W // 2
 offset = 140

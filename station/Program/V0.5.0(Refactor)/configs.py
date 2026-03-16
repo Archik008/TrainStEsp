@@ -350,11 +350,6 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     ("M2", "1"): {
         "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
     },
-    ("CH", "1"): {
-         "CH": { "lamps": { "yellow1": {"on": True, "blink": False},} },
-    },
-    ("CH", "2"): { "CH": { "lamps": { "yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False},} },
-    },
     ("M6", "H2"): {
         "M6": {"lamps": {"white": {"on": True, "blink": False},} },},
     ("M6", "H4"): {
@@ -389,7 +384,27 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     },
     ("M6", "4"): {
         "M6": {"lamps": {"white": {"on": True, "blink": False} }, },
-    }
+    },
+
+
+
+    ("CH", "1"): {
+        "CH": {"lamps": {"yellow1": {"on": True, "blink": False}, } },
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("CH", "2"): {
+        "CH": {"lamps": {"yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False}, } },
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("CH", "3"): {
+        "CH": {"lamps": {"yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False}, }   },
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("CH", "4"): {
+        "CH": {"lamps": {"yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False}, }},
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+
 }
 routes = {
     # МАНЕВРОВЫЕ

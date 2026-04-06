@@ -11,9 +11,10 @@ from serial import SerialException
 from tkinter import messagebox
 import traceback
 
+
 root = tk.Tk()
 root.title("Станция")
-canvas = tk.Canvas(root, width=1250, height=600, bg="#ede9e8")
+canvas = tk.Canvas(root, width=1250, height=600, bg="#7AA49A")
 
 
 def quit_function():
@@ -136,13 +137,17 @@ class SignalManager():
         },
 
     }
-    def __init__(self, canvas, root, RouteManager):
+    def __init__(self, canvas, root):
         self.canvas = canvas
         self.root = root
         self.signal_ids = {}
+        self.signal_ids_simple = {}
         self.signal_blink_phase = False
-        self.route_manager = RouteManager
+        self.simple_vis_mode = True
+        self.route_manager = None
 
+    def set_dependencies(self, route_manager):
+        self.route_manager = route_manager
 
     def make_signal_state(self, name, colors):
         self.signals_state[name] = {
@@ -151,9 +156,13 @@ class SignalManager():
                 for color in colors
             }
         }
+
+    def get_simple_state(self):
+        return self.simple_vis_mode
+
     def drawSignal(self, offsety, name, mount="bottom", pack_side="right", count=3, colors=None):
         x, y = positions[name]
-        r = 4
+        r = 5
         gap = 2 * r + 2
         stand_len = 15
         bar_len = 10
@@ -161,13 +170,13 @@ class SignalManager():
         dy_sign = -1 if mount == "top" else 1
         sx, sy = x, y + dy_sign * stand_len
 
-        canvas.create_line(x, y, sx, sy + offsety, width=2, fill=interface_manager.line_color_main)
+        canvas.create_line(x, y, sx, sy + offsety, width=2, fill="white")
 
         hx_sign = 1 if pack_side == "right" else -1
 
         hx0, hy0 = sx, sy
         hx1, hy1 = sx + hx_sign * bar_len, sy
-        canvas.create_line(hx0, hy0 + offsety, hx1, hy1 + offsety, width=2, fill=interface_manager.line_color_main)
+        canvas.create_line(hx0, hy0 + offsety, hx1, hy1 + offsety, width=2, fill="white")
 
         ids = []
         start_cx = hx1 + hx_sign * (r + 1)
@@ -182,7 +191,7 @@ class SignalManager():
             oid = canvas.create_oval(
                 cx - r, cy - r + offsety,
                 cx + r, cy + r + offsety,
-                outline=interface_manager.line_color_main, width=1, fill=fill_color
+                outline="#F5F5F5", width=0.25, fill=fill_color
             )
             ids.append(oid)
 
@@ -302,7 +311,7 @@ class SignalManager():
                             return True
         return False
 
-    def recalc_signals_to_red(self, rid) -> None:
+    def recalc_signals_to_red(self, rid):
         AdditionalSignals = ["ALB_Sect1-2", "ALB_Sect1-2_2", "ALB_Sect2"]
         # включаем красный по умолчанию
         if rid != None:
@@ -409,24 +418,102 @@ class SignalManager():
                 cfg["count"],
                 cfg.get('colors'),
             )
+    def disable_simple_mode(self):
+        for name in self.signal_ids:
+            for oid in self.signal_ids.get(name):
+                canvas.itemconfig(oid, state="normal")
+        for name in self.signal_ids_simple:
+            for oid in self.signal_ids_simple.get(name):
+                canvas.itemconfig(oid, state="hidden")
+
+    def change_simple_mode(self, state):
+        self.simple_vis_mode = state
+
+    def enable_simple_mode(self):
+        allowedNames = ['ALB_Sect1-2', 'ALB_Sect1-2_2', 'ALB_Sect2']
+        for name in self.signal_ids_simple:
+            for oid in self.signal_ids_simple.get(name):
+                canvas.itemconfig(oid, state="normal")
+        for name in self.signal_ids:
+            if name in allowedNames:
+                continue
+            else:
+                for oid in self.signal_ids.get(name):
+                    canvas.itemconfig(oid, state="hidden")
+
+
+    def drawAllSignals_Simple(self):
+        for name, cfg in signals_config_simple.items():
+            self.drawSignal_simple(
+                0,
+                name,
+                cfg['mount'],
+                cfg["pack_side"],
+                cfg["count"],
+                cfg.get('colors'),
+            )
 
     def initialize_signals(self):
         self.drawAllSignals()
+        #self.drawAllSignals_Simple()
         self.update_signals_visual_v2()
         self.recalc_signals_to_red(None)
+        self.checkMode_on_start()
+
+    def checkMode_on_start(self):
+        signal_visual_change()
+
+    def drawSignal_simple(self, offsety, name, mount="bottom", pack_side="right", count=3, colors=None):
+        x, y = positions[name]
+        r = 4
+        gap = 2 * r + 2
+        stand_len = 15
+        bar_len = 10
+
+        dy_sign = -1 if mount == "top" else 1
+        sx, sy = x, y + dy_sign * stand_len
+
+        canvas.create_line(x, y, sx, sy + offsety, width=2, fill=interface_manager.line_color_main)
+
+        hx_sign = 1 if pack_side == "right" else -1
+
+        hx0, hy0 = sx, sy
+        hx1, hy1 = sx + hx_sign * bar_len, sy
+        canvas.create_line(hx0, hy0 + offsety, hx1, hy1 + offsety, width=2, fill=interface_manager.line_color_main)
+
+        ids = []
+        start_cx = hx1 + hx_sign * (r + 1)
+
+        for i in range(count):
+            cx = start_cx + hx_sign * i * gap
+            cy = sy
+
+            fill_color = ""
+            if colors is not None and i < len(colors):
+                fill_color = colors[i]
+            oid = canvas.create_oval(
+                cx - r, cy - r + offsety,
+                cx + r, cy + r + offsety,
+                outline=interface_manager.line_color_main, width=1, fill=fill_color
+            )
+            ids.append(oid)
+
+        self.make_signal_state(name, colors)
+        self.signal_ids_simple[name] = ids
 
 class OccupancyManager:
+    isOccupied = False
+    wasOccupied = False
+
     def __init__(
             self,
             canvas,
             root,
-            SignalManager,
-            RouteManager,
     ):
         self.canvas = canvas
         self.root = root
-        self.route_manager = RouteManager()
-        self.signal_manager = SignalManager(self.canvas, self.root, self.route_manager)
+        self.route_manager = None
+        self.signal_manager = None
         self.interface_manager = None
         # self.segment_ids = segment_ids
         # self.diag_ids = diag_ids
@@ -434,39 +521,43 @@ class OccupancyManager:
         # self.segment_to_block = segment_to_block
         # self.diag_to_signal = diag_to_signal
 
-    def set_dependencies(self, interface_manager):
+    def set_dependencies(self, interface_manager, route_manager, signal_manager):
         self.interface_manager = interface_manager
+        self.route_manager = route_manager
+        self.signal_manager = signal_manager
 
-    def update_all_occupancy(self):
-        for seg in seg_occ_train:
-            rev = (seg[1], seg[0])
-            if seg_occ_train.get(seg, 1) == 0:
-                for i in range(route_manager.get_route_counter() + 1):
-                    occupied_segments.discard((seg, i))
-                signal_segment = segment_to_signal.get(seg)
-                if signal_segment == None:
-                    signal_segment = segment_to_signal.get(rev)
-                if self.signal_manager.has_signal_in_states(signal_segment):
-                    for colors in self.signal_manager.get_lamp_colors(signal_segment):
-                        if colors == "red":
-                            self.signal_manager.set_signal(signal_segment, colors, onStatus=True, blink=False)
-
-                        elif colors == "blue":
-                            self.signal_manager.set_signal(signal_segment, colors, onStatus=True, blink=False)
-                        else:
-                            self.signal_manager.set_signal(signal_segment, colors, onStatus=False, blink=False)
-                for i in range(route_manager.get_route_counter() + 1):
-                    occupied_segments.discard((rev, i))
-                self.route_manager.check_if_route_finished(seg, rev, diag="")
-                block = segment_to_block.get(seg)
-                if block is None:
+    def update_paint_segments(self):
+        for (a, b), seg_id in segment_ids.items():
+            seg = (a,b)
+            if not route_manager.if_seg_in_counter_list(seg):
+                seg = (b,a)
+            else:
+                seg = (a,b)
+            block = segment_to_block.get(seg)
+            if block:
+                if route_manager.is_block_occupied(block):
+                    for s in segment_groups[block]:
+                        interface_manager.paint_segment(s, "red")
                     continue
-                segs_in_block = segment_groups[block]
-                for s in segs_in_block:
-                    for i in range(route_manager.get_route_counter() + 1):
-                        occupied_segments.discard((s, i))
-                        occupied_segments.discard(((s[1], s[0]), i))
+            if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
+                interface_manager.paint_segment((a, b), "red")
+                continue
+            if route_manager.if_seg_in_counter_list(seg) and route_manager.get_segment_counter(seg) > 0:
+                interface_manager.paint_segment((a, b), "yellow")
+                continue
+            self.interface_manager.paint_segment((a, b), interface_manager.line_color_main)
 
+    def update_paint_diagonals(self):
+        for diag_name, lines in diag_ids.items():
+            if diag_occ_train.get(diag_name, 1) == 0:
+                interface_manager.paint_diagonal(diag_name, "red")
+                continue
+            if self.route_manager.if_diag_in_counter_list(diag_name) and route_manager.get_diag_counter(diag_name) > 0:
+                interface_manager.paint_diagonal(diag_name, "yellow")
+                continue
+            interface_manager.paint_diagonal(diag_name, interface_manager.line_color_main)
+
+    def update_routes_diagonals(self):
         for diag in diag_occ_train:
             if diag_occ_train.get(diag, 1) == 0:
                 signal_diag = diag_to_signal.get(diag)
@@ -479,76 +570,126 @@ class OccupancyManager:
                         else:
                             self.signal_manager.set_signal(signal_diag, colors, onStatus=False)
 
-                for i in range(route_manager.get_route_counter() + 1):
-                    occupied_diagonals.discard(((diag), i))
+                self.route_manager.minus_from_counter_diag(diag)
+
                 self.route_manager.check_if_route_finished(seg="", rev="", diag=diag)
-        for (a, b), seg_id in segment_ids.items():
-            seg = (a, b)
-            block = segment_to_block.get(seg)
-            rev = (b,a)
-            if block:
 
-                if any(seg_occ_train.get(s, 1) == 0 for s in segment_groups[block]):
-                    interface_manager.paint_segment(seg, "red")
-                    continue
-                for s in segment_groups[block]:
-                    if any(s == seg for s, _ in occupied_segments):
-                        #if s in occupied_segments:
-                        interface_manager.paint_segment(seg, "yellow")
-                        continue
-                interface_manager.paint_segment(s, interface_manager.line_color_main)
 
-            if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
-                interface_manager.paint_segment((a, b), "red")
-                continue
-            if any(s == seg or s == rev for s, _ in occupied_segments):
-                interface_manager.paint_segment((a, b), "yellow")
-                continue
+    prev_seg_state = {}
 
-            self.interface_manager.paint_segment((a, b), interface_manager.line_color_main)
+    def update_routes_segment(self):
+        for seg in seg_occ_train:
+            rev = (seg[1], seg[0])
+            current = seg_occ_train.get(seg, 1)
+            prev = self.prev_seg_state.get(seg, 1)
 
-        for diag_name, lines in diag_ids.items():
-            if diag_occ_train.get(diag_name, 1) == 0:
-                interface_manager.paint_diagonal(diag_name, "red")
-                continue
-            if self.route_manager.is_diagonal_occupied(diag_name):
-                interface_manager.paint_diagonal(diag_name, "yellow")
-                continue
-            # 3) свободна -> чёрная
-            interface_manager.paint_diagonal(diag_name, interface_manager.line_color_main)
+            if prev == 1 and current == 0:
+                block = segment_to_block.get(seg)
+                self.route_manager.check_if_route_finished(seg, rev, diag="")
+                if block:
+                    segs_in_block = segment_groups[block]
+                    for s in segs_in_block:
+                        rev = (s[1], s[0])
+                        if route_manager.if_seg_in_counter_list(s):
+                            route_manager.minus_from_counter_segment(s)
+                        elif route_manager.if_seg_in_counter_list(rev):
+                            route_manager.minus_from_counter_segment(rev)
+                else:
+
+                    if route_manager.if_seg_in_counter_list(seg):
+                        route_manager.minus_from_counter_segment(seg)
+                    elif route_manager.if_seg_in_counter_list(rev):
+                        route_manager.minus_from_counter_segment(rev)
+
+
+            self.prev_seg_state[seg] = current
+
+    def update_all_occupancy(self):
+
+        self.update_routes_segment()
+        self.update_paint_segments()
+        self.update_paint_diagonals()
+        self.update_routes_diagonals()
+
+
         self.root.after(100, self.update_all_occupancy)
 
 class RouteManager:
     current_mode = "maneuver"
+    active_routes = {}
     route_counter = 1
+    segments_active_counter = {
+        ("pastM1", "M1"): 0,
+        ("M8mid", "M8"): 0,
+        ("M8mid", "M1"): 0,
+        ("M8", "H1"): 0,
+        ("M2", "CH"): 0,
+        ("past2", "H2"): 0,
+        ("H2", "M6H2"): 0,
+        ("M6", "M6H2"): 0,
+        ("M2", "M2H1_mid"): 0,
+        ("M2H1_mid", "M2H1_third"): 0,
+        ("H1", "M2H1_third"): 0,
+        ("M10", "H3"): 0,
+        ("past4", "H4"): 0,
+        ("M6", "beforeM6"): 0,
+    }
+    diag_active_counter = {
+        'ALB_Turn2': 0,
+        'ALB_Turn1': 0,
+        'ALB_Turn8': 0,
+        'ALB_Turn4': 0,
+        'ALB_Turn6': 0,
+    }
+
     def __init__(self):
         self.route_counter = 1
-        self.active_routes = {}
         self.interface_manager = None
         self.switch_manager = None
+
+    def minus_from_counter_segment(self, segment):
+        if self.segments_active_counter[segment] > 0:
+            self.segments_active_counter[segment] -= 1
+
+    def get_segment_counter(self, seg):
+        return self.segments_active_counter[seg]
+
+    def minus_from_counter_diag(self, diag):
+        if self.diag_active_counter[diag] > 0:
+            self.diag_active_counter[diag] -= 1
+
+    def get_diag_counter(self, diag):
+        return self.diag_active_counter[diag]
+
+    def if_diag_in_counter_list(self, diag):
+        if diag in self.diag_active_counter:
+            return True
+        else:
+            return False
+
+    def is_block_occupied(self, block):
+        for s in segment_groups[block]:
+            if seg_occ_train.get(s, 1) == 0:
+                return True
+        return False
+
+    def if_seg_in_counter_list(self, seg):
+        if seg in self.segments_active_counter:
+            return True
+        else:
+            return False
+
     def check_if_route_finished(self, seg, rev, diag):
         for rid in list(self.active_routes.keys()):
-            data = self.active_routes[rid]
-            segs = data["segments"]
-            all_segs = []
-            for steps in segs:
-                if steps.get("type") == "diag":
-                    all_segs.append(steps)
-                if steps.get("type") == "segment":
-                    all_segs.append(steps)
-            last_all = all_segs[-1]
-            if last_all.get("type") == "segment":
-                if seg == last_all["id"] or rev == last_all["id"]:
-                    self.release_route(rid)
-            if last_all.get("type") == "diag":
-                if last_all["name"] == diag:
-                    self.release_route(rid)
-            block = segment_to_block.get(seg)
-            if block:
-                for s in segment_groups[block]:
-                    if last_all.get("type") == "segment":
-                        if s == last_all["id"] or rev == last_all["id"]:
-                            self.release_route(rid)
+             data = self.active_routes[rid]
+             last_segment = data["segments"][-1]
+             block = segment_to_block.get(seg)
+             if seg == last_segment["id"] or rev == last_segment["id"]:
+                self.release_route(rid)
+             elif block:
+                 for s in segment_groups[block]:
+                     if s == last_segment["id"]:
+                         self.release_route(rid)
 
     part_to_split = {}
 
@@ -613,18 +754,14 @@ class RouteManager:
             return None
 
     def has_switch_conflict(self, a, b):
-        """
-        Проверяет, можно ли построить маршрут a->b или он ломает существующие стрелки.
-        """
         key = (a, b)
         if key not in route_switch_modes:
             key = (b, a)
             if key not in route_switch_modes:
-                return False  # маршрут не использует стрелки вообще
+                return False
 
         needed = route_switch_modes[key]
 
-        # пробегаем по ВСЕМ активным маршрутам
         for rid, data in self.active_routes.items():
 
             other_key = (data["start"], data["end"])
@@ -635,18 +772,12 @@ class RouteManager:
 
             other_needed = route_switch_modes[other_key]
 
-            # теперь сравниваем стрелки
             for diag_name, mode_needed in needed.items():
-
-                # если эта стрелка не используется другим маршрутом — всё норм
                 if diag_name not in other_needed:
                     continue
                 other_mode = other_needed[diag_name]
-                # если маршруты требуют РАЗНОЕ положение → конфликт
                 if other_mode != mode_needed:
-                    print(f"КОНФЛИКТ: стрелка {diag_name} уже занята маршрутом #{rid}, "
-                          f"она стоит в положении {other_mode}, "
-                          f"а требуется {mode_needed}")
+                    print(f"КОНФЛИКТ: стрелка {diag_name} уже занята маршрутом #{rid}")
                     return True
 
         return False
@@ -655,16 +786,8 @@ class RouteManager:
         if self.get_currnet_mode() == "maneuver":
             if self.has_switch_conflict(start, end):
                 return True
-            for step in routes.get((start, end)):
-                if step["type"] == "segment":
-                    a, b = step["id"]
-                    seg = (a, b)
-                    if self.is_segment_occupied(seg) or seg_occ_train.get((a, b),1) == 0 or seg_occ_train.get((b, a), 1) == 0:
-                        return True
-                elif step["type"] == "diag":
-                    if self.is_diagonal_occupied(step["name"]) or diag_occ_train.get(step["name"],1) == 0:
-                        return True
             return False
+
         if self.get_currnet_mode() == "train":
             if self.has_switch_conflict(start, end):
                 return True
@@ -689,10 +812,15 @@ class RouteManager:
             for step in routes.get((start, end)):
                 if step["type"] == "segment":
                     a, b = step["id"]
+                    if self.if_seg_in_counter_list((a,b)):
+                        self.segments_active_counter[(a,b)] +=1
+                    elif self.if_seg_in_counter_list((b,a)):
+                        self.segments_active_counter[(b, a)] += 1
                     occupied_segments.add(((a, b), rid))
                     occupied_segments.add(((b, a), rid))
                 elif step["type"] == "diag":
                     occupied_diagonals.add((step["name"], rid))
+                    self.diag_active_counter[step["name"]] += 1
 
             self.active_routes[rid] = {
                 "start": start,
@@ -704,11 +832,15 @@ class RouteManager:
             for step in train_routes.get((start, end)):
                 if step["type"] == "segment":
                     a, b = step["id"]
+                    if self.if_seg_in_counter_list((a,b)):
+                        self.segments_active_counter[(a,b)] +=1
+                    else:
+                        self.segments_active_counter[(b, a)] += 1
                     occupied_segments.add(((a, b), rid))
                     occupied_segments.add(((b, a), rid))
                 elif step["type"] == "diag":
                     occupied_diagonals.add((step["name"], rid))
-
+                    self.diag_active_counter[step["name"]] += 1
             self.active_routes[rid] = {
                 "start": start,
                 "end": end,
@@ -725,16 +857,22 @@ class RouteManager:
                 a, b = step["id"]
                 if any(seg == (a, b) and rid == route_id for seg, rid in occupied_segments):
                     interface_manager.paint_segment((a, b), interface_manager.line_color_main)
+                """
+                if self.if_seg_in_counter_list((a, b)):
+                    self.segments_active_counter[(a, b)] -= 1
+                elif self.if_seg_in_counter_list((b, a)):
+                    self.segments_active_counter[(b, a)] -= 1
+                """
                 occupied_segments.discard(((a, b), route_id))
                 occupied_segments.discard(((b, a), route_id))
             elif step["type"] == "diag":
                 if any(diag == step["name"] and rid == route_id for diag, rid in occupied_diagonals):
                     interface_manager.paint_diagonal(step["name"], interface_manager.line_color_main)
                 occupied_diagonals.discard((step["name"], route_id))
+                self.diag_active_counter[step["name"]] -= 1
         # recalc_signals_to_red(route_id)
         SignalManage.recalc_signals_to_red(route_id)
         del self.active_routes[route_id]
-
         self.interface_manager.comboboxDelete(route_id)
 
     def set_dependencies(self, interface_manager, switch_manager):
@@ -847,9 +985,9 @@ class SwitchManager:
         self.settingRoute = boolean_variable
 
 class interface_manager:
-    line_color_main = "black"
+    line_color_main = "white"
     def __init__(self):
-        self.line_color_main = "black"
+        self.line_color_main = "white"
         self.canvas = canvas
         self.node_ids = {}
         self.selected_nodes = []
@@ -908,8 +1046,8 @@ class interface_manager:
         for name, (x, y) in positions.items():
             if name in bannedNames:
                 continue
-            node = canvas.create_text(x, y - 25, text=name, tags=(f"node_{name}", "node"), fill=self.line_color_main,
-                                      font=("Bahnschrift SemiBold", 12))
+            node = canvas.create_text(x, y - 28, text=name, tags=(f"node_{name}", "node"), fill=self.line_color_main,
+                                      font=("Bahnschrift SemiBold", 14))
             self.node_ids[name] = node
 
     def showInfo(self, title, msg):
@@ -933,8 +1071,6 @@ class interface_manager:
         if seg_id is None:
             return
         canvas.itemconfig(seg_id, fill=color)
-
-
 
 
     def drawDeadEnd(self, name, direction, offset):
@@ -1040,7 +1176,6 @@ class interface_manager:
                 self.branchWidth(nameDiag, 2)
                 if nameDiag == "ALB_Turn2":
                     canvas.itemconfig(segment_ids[("M2H1_mid", "M2H1_third")], width=2)
-                    # canvas.itemconfig(segment_ids[("H1", "M2H1_third")], width=2)
 
         right_cfg = cfg["right"]
         if right_cfg["exists"]:
@@ -1102,9 +1237,14 @@ class interface_manager:
         combobox1.set('')
 
     def check(self):
+        # print("occupied segments:")
+        # print(occupied_segments)
+        print("--------------")
         print("Активные маршруты")
-        print(occupied_segments)
-        #print(self.route_manager.active_routes)
+        print(self.route_manager.active_routes)
+        print("------------------")
+        print("список маршрутов с счётчиком:")
+        print(self.route_manager.segments_active_counter)
 
     def visualSwitch(self, key):
         list = [("M2", "H1"), ("M2", "M8"), ("M2", "M1"), ("H1", "M2"), ("M1", "M2")]
@@ -1121,7 +1261,6 @@ class interface_manager:
         if switch_manager.is_settingRoute():
             self.reset_node_selection()
             return
-        # 2. Ищем настройки стрелок для этого маршрута
         key = (a, b)
         if key not in route_switch_modes:
             key = (b, a)
@@ -1130,11 +1269,10 @@ class interface_manager:
             self.reset_node_selection()
             return
 
-        route_cfg = route_switch_modes[key]  # только нужные стрелки для ЭТОГО маршрута
+        route_cfg = route_switch_modes[key]
         last_switch_check = {}
         changed = []
-        main_diag = None  # какая стрелка будет мигать в табличке
-
+        main_diag = None
         for diag_name, need_mode in route_cfg.items():
             current_mode = diagonal_modes.get(diag_name)
             ok = (current_mode == need_mode)
@@ -1153,21 +1291,15 @@ class interface_manager:
             main_diag = next(iter(route_cfg.keys()))
         self.switch_manager.set_settingRoute(True)
         self.paint_route(a, b, "cyan")
-        blink_route(a, b, duration_ms=2000, interval_ms=150)
+        blink_route(a, b, duration_ms=2000, interval_ms=200)
 
         if main_diag is not None:
-            blink_switches([main_diag], duration_ms=2000, interval_ms=150)
+            blink_switches([main_diag], duration_ms=2000, interval_ms=200)
         if changed:
             print("Изменены стрелки:")
             for line in changed:
                 print("  ", line)
-        """
-        else:
-            if route_cfg:
-                print("Стрелки уже стояли как нужно.")
-            else:
-                print("Маршрут без задействования стрелок.")
-        """
+
         self.reset_node_selection()
         self.visualSwitch(key)
 
@@ -1178,7 +1310,6 @@ class interface_manager:
             current_values = list(combobox1["values"])
             current_values.append(rid)
             combobox1["values"] = tuple(current_values)
-            # recalc_signals_from_active_routes((a,b))
             SignalManage.recalc_signals_from_active_routes((a, b))
 
         root.after(2100, finalize)
@@ -1198,7 +1329,7 @@ class interface_manager:
                 canvas.itemconfig(item_id, fill="yellow")
                 continue
             if name in possible:
-                canvas.itemconfig(item_id, fill="green")
+                canvas.itemconfig(item_id, fill="#4BFFA7")
                 canvas.itemconfig(item_id, state="normal")
             else:
                 canvas.itemconfig(item_id, fill="grey")
@@ -1249,7 +1380,7 @@ class interface_manager:
 
     def apply_mode_visuals(self):
         for name, item_id in self.node_ids.items():
-            color = "black"
+            color = "white"
             state = "normal"
             if self.route_manager.get_currnet_mode() == "maneuver" and name == "CH":
                 color = "grey"
@@ -1379,53 +1510,6 @@ SIGNAL_OFF_COLOR = "#202020"
 signal_blink_phase = False
 DEBUG_SIGNALS_FRAME = False
 
-# def _indices_for_color(sig_name: str, color: str) -> list[int]:
-#     cols = signals_config[sig_name]["colors"]
-#     return [i for i, c in enumerate(cols) if c == color]
-#
-# def gui_lamps_for_aspect(sig_name: str, aspect: str) -> tuple[set[int], set[int]]:
-#     """
-#     Возвращает:
-#       lit   = какие лампы должны светиться (индексы)
-#       blink = какие лампы должны мигать (индексы)
-#     """
-#
-#     lit: set[int] = set()
-#     blink: set[int] = set()
-#
-#     reds = _indices_for_color(sig_name, "red")
-#     greens = _indices_for_color(sig_name, "green")
-#     whites = _indices_for_color(sig_name, "white")
-#     blues = _indices_for_color(sig_name, "blue")
-#     yellows = _indices_for_color(sig_name, "yellow")
-#
-#     if aspect == "off":
-#         return set(), set()
-#
-#     if aspect == "red" and reds:
-#         lit.add(reds[0])
-#     elif aspect == "green" and greens:
-#         lit.add(greens[0])
-#     elif aspect == "white" and whites:
-#         lit.add(whites[0])
-#     elif aspect == "blue" and blues:
-#         lit.add(blues[0])
-#     elif aspect == "one_yellow" and yellows:
-#         lit.add(yellows[0])
-#     elif aspect == "two_yellow" and yellows:
-#         # если жёлтых две (как у CH), зажигаем обе; если одна — зажжётся одна
-#         for i in yellows:
-#             lit.add(i)
-#     elif aspect == "invite":
-#         # пригласительный: красный постоянный + белый мигает (если белый есть)
-#         if reds:
-#             lit.add(reds[0])
-#         if whites:
-#             lit.add(whites[0])
-#             blink.add(whites[0])
-#
-#     return lit, blink
-
 def get_switch_state_num(name):
     mode = diagonal_modes.get(name)
     normal = default_switch_mode.get(name, "left")
@@ -1456,7 +1540,6 @@ def update_switch_indicator(name):
     canvas.itemconfig(rect, fill=color)
     canvas.itemconfig(labelSwitch, text=text)
 
-#########################################  МИНИ-Таблица стрелок (правый нижний угол)  #########################################
 def create_switch_table():
     w = int(canvas["width"])
     h = int(canvas["height"])
@@ -1470,9 +1553,9 @@ def create_switch_table():
 
     for i, name in enumerate(switch_list, start=1):
         y = y_start + (i - 1) * dy
-        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12), tags=(f"switch_{name}", "switch"), )
+        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 13), tags=(f"switch_{name}", "switch"), fill="white" )
         switch_ids[name] = switch
-        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 12), )
+        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 14), fill="white")
 
         rect = canvas.create_rectangle(
             x_rect - 8, y - 8, x_rect + 8, y + 8,
@@ -1482,8 +1565,6 @@ def create_switch_table():
         switch_indicator_ids[name] = rect
         update_switch_indicator(name)
 create_switch_table()
-
-
 
 def blink_switches(diags, duration_ms=2000, interval_ms=200):
     if not diags:
@@ -1523,7 +1604,6 @@ def blink_switches_table(diags, duration_ms=2000, interval_ms=200):
                 if rect is not None:
                     canvas.itemconfig(rect, fill=final_colors[d])
             return
-
         for d in diags:
             rect = switch_indicator_ids.get(d)
             if rect is not None:
@@ -1531,8 +1611,6 @@ def blink_switches_table(diags, duration_ms=2000, interval_ms=200):
         root.after(interval_ms, _step, not state)
 
     _step(True)
-
-#########################################        СТРЕЛКИ/ДИАГОНАЛИ               ##############################################
 
 def AddDiagonal(x1, y1, x2, y2, offsetleft, offsetright, nameDiag):
     l1 = canvas.create_line(x1, y1, x1 - offsetleft, y1, width=3, fill=interface_manager.line_color_main)
@@ -1554,7 +1632,6 @@ def AddSplitDiagonal(x1, y1, x2, y2,
     diag_ids[(namePart1)] = [l1, l2]
     diag_ids[(namePart2)] = [l3, l4]
 
-#########################################       ЛИНИИ              ##############################################
 for a, b in segments:
     x1, y1 = positions[a]
     x2, y2 = positions[b]
@@ -1562,14 +1639,10 @@ for a, b in segments:
     segment_ids[(a, b)] = seg
     segment_ids[(b, a)] = seg
 
-#########################################        ДИАГОНАЛИ/СТРЕЛКИ               ##############################################
 AddDiagonal(260, 330, 350, 430, 20, 38, "ALB_Turn2")
 AddDiagonal(965, 330, 890, 430, -22, -37, "ALB_Turn1")
 AddDiagonal(560, 130, 470, 230, -57, -20, "ALB_Turn8")
 AddSplitDiagonal(430, 230, 390, 280,350, 330, -30, -30, "ALB_Turn4-6", "ALB_Turn4", "ALB_Turn6")
-
-#########################################        ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ УЗЛОВ      ##############################################
-
 
 def get_switch_name_from_event(event):
     items = canvas.find_withtag("current")
@@ -1582,7 +1655,6 @@ def get_switch_name_from_event(event):
             return t.replace("switch_", "")
     return None
 
-
 def switch_on_enter(event):
     name = get_switch_name_from_event(event)
     canvas.itemconfig(switch_ids[name], fill="pink")
@@ -1591,7 +1663,6 @@ def switch_on_leave(event):
     name = get_switch_name_from_event(event)
     canvas.itemconfig(switch_ids[name], fill=interface_manager.line_color_main)
 
-#########################################        МИГАНИЕ МАРШРУТА               ##############################################
 def is_segment_in_blinking_route(seg):
     a, b = seg
     for (start, end) in blinking_routes:
@@ -1614,12 +1685,10 @@ def blink_route(start, end, duration_ms=2000, interval_ms=200):
             interface_manager.paint_route(start, end, interface_manager.line_color_main)
             return
 
-        color = "#4c86a6" if state else interface_manager.line_color_main
+        color = "#75CEFF" if state else interface_manager.line_color_main
         interface_manager.paint_route(start, end, color)
         root.after(interval_ms, _step, not state)
     _step(True)
-#########################################        ОБРАБОТКА КЛИКА ПО УЗЛУ          ##############################################
-
 
 def blink_diag(name, duration_ms=2000, interval_ms=200):
     print(name)
@@ -1635,7 +1704,7 @@ def blink_diag(name, duration_ms=2000, interval_ms=200):
                 interface_manager.paint_diagonal(name, interface_manager.line_color_main)
             return
 
-        color = "#4c86a6" if state else interface_manager.line_color_main
+        color = "#75CEFF" if state else interface_manager.line_color_main
         if name == "ALB_Turn4-6":
             interface_manager.paint_diagonal("ALB_Turn4", color)
             interface_manager.paint_diagonal("ALB_Turn6", color)
@@ -1648,9 +1717,8 @@ def checkOccupied():
     print(occupied_segments)
 
 
+
 def init_arduino():
-   # Поиск порта и подключение к Arduino.
-    
     global arduino, arduino_status_label
 
     try:
@@ -1662,13 +1730,12 @@ def init_arduino():
                 arduino_port = p.device
                 break
 
-        # если не нашли автоматически – выставь свой порт
         if arduino_port is None:
-            # ПОДСТАВЬ СВОЙ ПОРТ (например "COM3" или "/dev/ttyACM0")
+
             arduino_port = "COM3"
 
         arduino = serial.Serial(arduino_port, 9600, timeout=1)
-        time.sleep(2)  # дать Arduino перезапуститься
+        time.sleep(2)
 
         print(f"Arduino подключен к {arduino_port}")
         if arduino_status_label is not None:
@@ -1685,7 +1752,6 @@ def set_arduino_status(connected: bool, text: str = ""):
         arduino_status_label.config(text=f"Arduino: {text}", bg="green", fg="black")
     else:
         arduino_status_label.config(text="Arduino: not connected", bg="red", fg="white")
-
 
 def poll_arduino():
     global ser
@@ -1705,7 +1771,6 @@ def poll_arduino():
 
     root.after(20, poll_arduino)
 
-
 def find_arduino_port():
     ports = list_ports.comports()
     for p in ports:
@@ -1719,13 +1784,16 @@ def find_arduino_port():
     print("COM-порты не найдены вообще.")
     return None
 
-
 def signal_visual_change():
-    pass
-#########################################        БИНДЫ И НАЧАЛЬНАЯ ОКРАСКА        ##############################################
+    if not SignalManage.get_simple_state():
+        SignalManage.enable_simple_mode()
+        SignalManage.change_simple_mode(True)
+        button_visual_change.config(text="Выключить упрощённый")
+    else:
+        SignalManage.disable_simple_mode()
+        SignalManage.change_simple_mode(False)
+        button_visual_change.config(text="Включить упрощённый")
 
-
-# метка статуса Arduino
 arduino_status_label = tkinter.Label(root, text="Arduino: проверка...", fg="orange",  font=("Bahnschrift bold", 12))
 arduino_status_label.place(x=300, y=16)
 
@@ -1733,17 +1801,15 @@ n = tkinter.StringVar()
 combobox1 = ttk.Combobox(root, width = 25, textvariable = n, state='readonly', font=("Bahnschrift bold", 9))
 combobox1.place(x=510,y=20)
 
-
 # button = tkinter.Button(root, text="Проверка occupied", command=checkOccupied, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
 # button.place(x=880, y=40)
 
-button_visual_change = tkinter.Button(root, text="Упрощённый: вкл", command=signal_visual_change, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
+button_visual_change = tkinter.Button(root, text="Упрощённый: ", command=signal_visual_change, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
 button_visual_change.place(x=960, y=18)
 buttons_y = CANVAS_H - 80
 
 center_x = CANVAS_W // 2
 offset = 140
-
 
 def do(button_id):
     if button_id >= 0 and button_id < 13:
@@ -1759,21 +1825,20 @@ for i in range(18):
     button69 = tkinter.Button(root, text=f"{[i]}", command=lambda id=i: do(id), relief="flat")
     button69.place(x=1220, y=40 + i * 25)
 
-
-######################################### ЗАПУСК ЦИКЛОВ ##############################################
 init_arduino()
 poll_arduino()
-occupancy_manager = OccupancyManager(canvas, root, SignalManager, RouteManager)
-SignalManage = SignalManager(canvas, root, RouteManager)
+occupancy_manager = OccupancyManager(canvas, root)
+SignalManage = SignalManager(canvas, root)
 SignalManage.initialize_signals()
 SignalManage.bind_invite_button()
 route_manager = RouteManager()
+SignalManage.set_dependencies(route_manager)
 switch_manager = SwitchManager()
 interface_manager = interface_manager()
 switch_manager.set_dependencies(route_manager, interface_manager)
 route_manager.set_dependencies(interface_manager, switch_manager)
 interface_manager.set_dependencies(route_manager, switch_manager)
-occupancy_manager.set_dependencies(interface_manager)
+occupancy_manager.set_dependencies(interface_manager, route_manager, SignalManage)
 occupancy_manager.update_all_occupancy()
 switch_manager.initialize_switches()
 root.protocol('WM_DELETE_WINDOW', quit_function)

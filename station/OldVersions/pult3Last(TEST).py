@@ -17,9 +17,11 @@ canvas.pack()
 
 CANVAS_W = 1200
 CANVAS_H = 600
+root.resizable(False, False)
 
 def showInfo(title, msg):
     showinfo(title=title, message=msg)
+
 #########################################        ФУНКЦИЯ ТУПИКОВ                ##############################################
 def drawDeadEnd(name, direction, offset):
     x = positions[name][0]
@@ -204,7 +206,10 @@ segment_to_signal = {
     ('M1', 'M8mid'): "M8",
 
     ("M8", "H1"): "H1",
-    ("pastM1", "M1"): "M1",
+
+
+    ('M1', 'M8mid'): "M1",
+    #("pastM1", "M1"): "M1",
 
     ("M10", "H3"): "H3",
 
@@ -214,6 +219,7 @@ segment_to_signal = {
 
     ("H2", "M6H2"): "H2",
     ("M6", "M6H2"): "M6",
+
 
 }
 
@@ -679,6 +685,15 @@ def debug_print_frame(regs: list[int]) -> None:
 # --- Карта: какой маршрут -> какие аспекты на каких светофорах
 # Ключ: (start_node, end_node) как в routes/train_routes (или в active_routes["start"/"end"])
 ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
+    ("M1", "M8"): {
+        "M1": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("M1", "H1"): {
+        "M1": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("M1", "M10"): {
+        "M1": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
     ("M2", "H3"): { "M2": { "lamps": { "white": {"on": True, "blink": False}, } },
                     "H3": { "lamps": { "yellow": {"on": True, "blink": False}, "red":    {"on": False, "blink": False}, "green": {"on": True, "blink": False}, } },
     },
@@ -688,7 +703,27 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     ("M2", "H1"):{
         "M2": {"lamps": { "white": {"on": True, "blink": False}, } },
     },
-
+    ("M2", "M8"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }}, },
+    ("M2", "M1"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }, },
+        "M8": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("M2", "H2"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("M2", "H1"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
+    },
+    ("M2", "2"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
+    },
+    ("M2", "4"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
+    },
+    ("M2", "1"): {
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }},
+    },
     ("CH", "1"): {
          "CH": { "lamps": { "yellow1": {"on": True, "blink": False},} },
         "H1": { "lamps": { "green": {"on": True, "blink": False},} },
@@ -696,14 +731,37 @@ ROUTE_SIGNAL_MAP: dict[tuple[str, str], dict[str, dict[str, object]]] = {
     ("CH", "2"): { "CH": { "lamps": { "yellow": {"on": True, "blink": False}, "yellow1": {"on": True, "blink": False},} },
                     "H2": {"lamps": { "green": {"on": True, "blink": False}, } },
     },
-    ("M8", "M1"): { "M8": { "lamps": { "white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},} },
-                    "M1": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},} }
+    ("M6", "H2"): {
+        "M6": {"lamps": {"white": {"on": True, "blink": False},} },},
+    ("M6", "H4"): {
+        "M6": {"lamps": {"white": {"on": True, "blink": False}, }, },
     },
-    ("M6", "H2"): {"M6": {"lamps": {"white": {"on": True, "blink": False},} },},
-    ("M10", "M1"): {"M10": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False}, }},
-                   "M1": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False}, }}
-                   },
-    ("M2", "M8"): {"M2": {"lamps": {"white": {"on": True, "blink": False}, }}, },
+    ("M8", "M1"): {
+        "M8": { "lamps": { "white": {"on": True, "blink": False}, "red": {"on": False, "blink": False},} },
+    },
+
+    ("M10", "M1"): {
+        "M10": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False}, }}, },
+    ("M1", "H3"): {
+        "M1": {"lamps": {"white": {"on": True, "blink": False}, "red": {"on": False, "blink": False}, }}, },
+
+    ("H1", "M2"): {
+        "H1": {"lamps": {"green": {"on": True, "blink": False}, }, },
+        "M2": {"lamps": {"white": {"on": True, "blink": False}, }, },
+    },
+    ("H2", "M2"):{
+        "H2": {"lamps": { "green": {"on": True, "blink": False}, "yellow": {"on": True, "blink": False}, }, },
+        "M2": {"lamps": {"white": {"on": True, "blink": False},},},
+    },
+    ("H2", "M6"):{
+        "H2": {"lamps": { "green": {"on": True, "blink": False} }, },
+    },
+    ("H4", "M6"):{
+        "H4": {"lamps": { "green": {"on": True, "blink": False}, "yellow": {"on": True, "blink": False}, }, },
+        "M6": {"lamps": {"white": {"on": True, "blink": False},},},
+    },
+
+
 }
 
 def recalc_signals_to_red(rid) -> None:
@@ -714,8 +772,9 @@ def recalc_signals_to_red(rid) -> None:
         a = data.get("start")
         b = data.get("end")
         key = (a, b)
-        if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
-            key = (b, a)
+       # if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
+            #print("Нет маршрута")
+            #return
         cfg = ROUTE_SIGNAL_MAP.get(key)
         for name in cfg:
             if name in AdditionalSignals:
@@ -755,8 +814,8 @@ def recalc_signals_from_active_routes() -> None:
             continue
 
         key = (a, b)
-        if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
-            key = (b, a)
+        #if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
+            #print("recalc_signals_from_active_routes")
 
         cfg = ROUTE_SIGNAL_MAP.get(key)
         if not cfg:
@@ -855,6 +914,7 @@ routes = {
         {"type": "segment", "id": ("H1", "M8")},
         {"type": "segment", "id": ("M8mid", "M8")},
         {"type": "segment", "id": ("M8mid", "M1")},
+        {"type": "segment", "id": ("M1", "pastM1")},
     ],
     ("M2", "M10"): [
         {"type": "segment", "id": ("M2", "M2H1_mid")},
@@ -878,6 +938,29 @@ routes = {
         {"type": "diag", "name": "ALB_Turn8"},
 
     ],
+    ("M2", "1"): [
+        {"type": "segment", "id": ("M2", "M2H1_mid")},
+        {"type": "segment", "id": ("M2H1_mid", "M2H1_third")},
+        {"type": "segment", "id": ("H1", "M2H1_third")},
+        {"type": "segment", "id": ("H1", "M8")},
+    ],
+    ("M2", "2"): [
+        {"type": "segment", "id": ("M2", "M2H1_mid")},
+        {"type": "segment", "id": ("M2H1_mid", "M2H1_third")},
+        {"type": "diag", "name": "ALB_Turn4"},
+        {"type": "diag", "name": "ALB_Turn6"},
+        {"type": "segment", "id": ("H2", "M6H2")},
+        {"type": "segment", "id": ("H2", "past2")},
+    ],
+    ("M2", "4"): [
+        {"type": "segment", "id": ("M2H1_mid", "M2H1_third")},
+        {"type": "segment", "id": ("M2", "M2H1_mid")},
+        {"type": "diag", "name": "ALB_Turn4"},
+        {"type": "diag", "name": "ALB_Turn6"},
+        {"type": "diag", "name": "ALB_Turn8"},
+        {"type": "segment", "id": ("M8", "M1")},
+        {"type": "segment", "id": ("past4", "H4")},
+    ],
     ("H2", "M6"): [
         {"type": "segment", "id": ("H2", "M6H2")},
         {"type": "segment", "id": ("M6H2", "M6")},
@@ -893,6 +976,7 @@ routes = {
     ("H4", "M6"): [
         {"type": "diag", "name": "ALB_Turn8"},
         {"type": "segment", "id": ("M6H2", "M6")},
+        {"type": "segment", "id": ("M6", "beforeM6")},
     ],
     ("H4", "M2"): [
         {"type": "diag", "name": "ALB_Turn8"},
@@ -904,12 +988,10 @@ routes = {
     ("M6", "H4"):[
         {"type": "segment", "id": ("M6H2", "M6")},
         {"type": "diag", "name": "ALB_Turn8"},
-        {"type": "segment", "id": ("past4", "H4")},
     ],
     ("M6", "H2"):[
         {"type": "segment", "id": ("M6H2", "M6")},
         {"type": "segment", "id": ("M6H2", "H2")},
-        {"type": "segment", "id": ("H2", "past2")},
     ],
     ("H3", "M10"): [
         {"type": "segment", "id": ("H3", "M10")},
@@ -938,6 +1020,12 @@ routes = {
         {"type": "segment", "id": ("M8mid", "M1")},
         {"type": "segment", "id": ("M8mid", "M8")},
     ],
+    ("M1", "H3"): [
+        {"type": "segment", "id": ("M8mid", "M1")},
+        {"type": "segment", "id": ("M8mid", "M8")},
+        {"type": "diag", "name": "ALB_Turn1"},
+        {"type": "segment", "id": ("H3", "M10")},
+    ],
     ("M8", "M1"): [
         {"type": "segment", "id": ("M8mid", "M8")},
         {"type": "segment", "id": ("M8mid", "M1")},
@@ -949,6 +1037,11 @@ routes = {
         {"type": "segment", "id": ("M8mid", "M8")},
         {"type": "segment", "id": ("M8", "H1")},
     ],
+    ("M1", "M10"): [
+        {"type": "segment", "id": ("M8mid", "M1")},
+        {"type": "segment", "id": ("M8mid", "M8")},
+        {"type": "diag", "name": "ALB_Turn1"},
+    ]
 }
 
 train_routes = {
@@ -999,6 +1092,9 @@ route_switch_modes = {
     ("M2", "H1"): {"ALB_Turn2": "left","ALB_Turn4-6":  "left"},
     ("M2", "M8"): {"ALB_Turn2": "left", "ALB_Turn4-6":  "left"},
     ("M2", "M1"): {"ALB_Turn1": "left","ALB_Turn2": "left","ALB_Turn4-6":  "left"},
+    ("M2", "1"):  {"ALB_Turn4-6": "left", "ALB_Turn2": "left"},
+    ("M2", "2"): {"ALB_Turn2": "left", "ALB_Turn4-6": "right", "ALB_Turn8": "left"},
+    ("M2", "4"): {"ALB_Turn2": "left","ALB_Turn4-6": "right", "ALB_Turn8": "right"},
     ("M1", "M8"): {"ALB_Turn1": "left"},
     ("M1", "H1"): {"ALB_Turn1": "left"},
     ("M2", "H2"): {"ALB_Turn4-6": "right", "ALB_Turn8":  "left", "ALB_Turn2": "left"},
@@ -1434,6 +1530,9 @@ def check_if_route_finished(seg, rev, diag):
         data = active_routes[rid]
         segs = data["segments"]
         all_segs = []
+        if not segs:
+            release_route(rid)
+            continue
         for steps in segs:
             if steps.get("type") == "diag":
                 all_segs.append(steps)
@@ -1466,12 +1565,21 @@ for split_name in split_parts_map:
     for part, logic_name in split_parts_map[split_name].items():
         part_to_split[logic_name] = (split_name, part)
 
+def remove_segment_from_routes(seg):
+    rev = (seg[1], seg[0])
+
+    for route_id, data in active_routes.items():
+        for i in range(len(data["segments"]) - 1, -1, -1):
+            step = data["segments"][i]
+            if step["type"] == "segment" and (step["id"] == seg or step["id"] == rev):
+                del data["segments"][i]
+                print(f"Удалён {seg} из маршрута {route_id}")
 
 def update_all_occupancy():
-
     for seg in seg_occ_train:
         rev = (seg[1], seg[0])
         if seg_occ_train.get(seg, 1) == 0:
+            remove_segment_from_routes(seg)
             occupied_segments.discard(seg)
             signal_segment = segment_to_signal.get(seg)
             if signal_segment == None:
@@ -1484,6 +1592,7 @@ def update_all_occupancy():
                         signals_state[signal_segment]["lamps"][colors]["on"] = True
                     else:
                         signals_state[signal_segment]["lamps"][colors]["on"] = False
+            remove_segment_from_routes(rev)
             occupied_segments.discard(rev)
             check_if_route_finished(seg, rev, diag="")
             block = segment_to_block.get(seg)
@@ -1493,6 +1602,10 @@ def update_all_occupancy():
             for s in segs_in_block:
                 occupied_segments.discard(s)
                 occupied_segments.discard((s[1], s[0]))
+                remove_segment_from_routes(s)
+                remove_segment_from_routes((s[1], s[0]))
+
+
     for diag in diag_occ_train:
         if diag_occ_train.get(diag, 1) == 0:
             signal_diag = diag_to_signal.get(diag)
@@ -1504,8 +1617,10 @@ def update_all_occupancy():
                         signals_state[signal_diag]["lamps"][colors]["on"] = True
                     else:
                         signals_state[signal_diag]["lamps"][colors]["on"] = False
+
             occupied_diagonals.discard(diag)
             check_if_route_finished(seg="", rev="", diag=diag)
+
     for (a, b), seg_id in segment_ids.items():
         seg = (a, b)
         block = segment_to_block.get(seg)
@@ -1516,19 +1631,24 @@ def update_all_occupancy():
                 paint_segment(seg, "red")
                 continue
             for s in segment_groups[block]:
-                if s in occupied_segments:
-                    paint_segment(seg, "yellow")
-                    continue
-            paint_segment(s, "black")
-
+                for routes in active_routes:
+                    data = active_routes[routes]
+                    if s in data:
+                        paint_segment(seg, "yellow")
+                        continue
+                #paint_segment(s, "black")
         if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0 :
             paint_segment((a,b), "red")
             continue
-        if (a, b) in occupied_segments or (b, a) in occupied_segments:
-            paint_segment((a,b), "yellow")
-            continue
-
-        paint_segment((a, b), "black")
+        if any(
+                step["type"] == "segment" and
+                (step["id"] == (a, b) or step["id"] == (b, a))
+                for data in active_routes.values()
+                for step in data["segments"]
+        ):
+            paint_segment((a, b), "yellow")
+        else:
+            paint_segment((a, b), "black")
 
 
     for diag_name, lines in diag_ids.items():
@@ -1910,6 +2030,7 @@ def on_switch_mode_selected(name,mode):
         showInfo("Ошибка", "Невозможно сменить стрелку")
         return
     changingSwitches = True
+
     blink_diag(name, duration_ms=2000, interval_ms=200)
 
     def finalize():
@@ -2049,6 +2170,8 @@ def check():
     print("Активные маршруты")
     print(active_routes)
 
+def check_occupied():
+    print(occupied_segments)
 #########################################        Arduino: функции подключения/отправки ##########################################
 def init_arduino():
     """
@@ -2157,6 +2280,8 @@ buttonAll = tkinter.Button(root, text="Убрать всё", command=snosAll)
 buttonAll.place(x=770, y=18)
 button = tkinter.Button(root, text="Проверка", command=check)
 button.place(x=860, y=18)
+button = tkinter.Button(root, text="Проверка occupied", command=check_occupied)
+button.place(x=860, y=40)
 
 buttons_y = CANVAS_H - 80
 

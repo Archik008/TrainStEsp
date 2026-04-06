@@ -13,7 +13,7 @@ import traceback
 
 root = tk.Tk()
 root.title("Станция")
-canvas = tk.Canvas(root, width=1250, height=600, bg="#7AA49A")
+canvas = tk.Canvas(root, width=1250, height=600, bg="#ede9e8")
 
 
 def quit_function():
@@ -136,17 +136,15 @@ class SignalManager():
         },
 
     }
-    def __init__(self, canvas, root):
+    def __init__(self, canvas, root, RouteManager):
         self.canvas = canvas
         self.root = root
         self.signal_ids = {}
         self.signal_ids_simple = {}
         self.signal_blink_phase = False
         self.simple_vis_mode = True
-        self.route_manager = None
+        self.route_manager = RouteManager
 
-    def set_dependencies(self, route_manager):
-        self.route_manager = route_manager
 
     def make_signal_state(self, name, colors):
         self.signals_state[name] = {
@@ -161,7 +159,7 @@ class SignalManager():
 
     def drawSignal(self, offsety, name, mount="bottom", pack_side="right", count=3, colors=None):
         x, y = positions[name]
-        r = 5
+        r = 4
         gap = 2 * r + 2
         stand_len = 15
         bar_len = 10
@@ -169,13 +167,13 @@ class SignalManager():
         dy_sign = -1 if mount == "top" else 1
         sx, sy = x, y + dy_sign * stand_len
 
-        canvas.create_line(x, y, sx, sy + offsety, width=2, fill="white")
+        canvas.create_line(x, y, sx, sy + offsety, width=2, fill=interface_manager.line_color_main)
 
         hx_sign = 1 if pack_side == "right" else -1
 
         hx0, hy0 = sx, sy
         hx1, hy1 = sx + hx_sign * bar_len, sy
-        canvas.create_line(hx0, hy0 + offsety, hx1, hy1 + offsety, width=2, fill="white")
+        canvas.create_line(hx0, hy0 + offsety, hx1, hy1 + offsety, width=2, fill=interface_manager.line_color_main)
 
         ids = []
         start_cx = hx1 + hx_sign * (r + 1)
@@ -190,7 +188,7 @@ class SignalManager():
             oid = canvas.create_oval(
                 cx - r, cy - r + offsety,
                 cx + r, cy + r + offsety,
-                outline="#F5F5F5", width=0.25, fill=fill_color
+                outline=interface_manager.line_color_main, width=1, fill=fill_color
             )
             ids.append(oid)
 
@@ -501,18 +499,17 @@ class SignalManager():
         self.signal_ids_simple[name] = ids
 
 class OccupancyManager:
-    isOccupied = False
-    wasOccupied = False
-
     def __init__(
             self,
             canvas,
             root,
+            SignalManager,
+            RouteManager,
     ):
         self.canvas = canvas
         self.root = root
-        self.route_manager = None
-        self.signal_manager = None
+        self.route_manager = RouteManager()
+        self.signal_manager = SignalManager(self.canvas, self.root, self.route_manager)
         self.interface_manager = None
         # self.segment_ids = segment_ids
         # self.diag_ids = diag_ids
@@ -520,74 +517,39 @@ class OccupancyManager:
         # self.segment_to_block = segment_to_block
         # self.diag_to_signal = diag_to_signal
 
-    def set_dependencies(self, interface_manager, route_manager, signal_manager):
+    def set_dependencies(self, interface_manager):
         self.interface_manager = interface_manager
-        self.route_manager = route_manager
-        self.signal_manager = signal_manager
-
-    def update_segments(self):
-        for (a, b), seg_id in segment_ids.items():
-            seg = (a,b)
-            if not route_manager.if_seg_in_counter_list(seg):
-                seg = (b,a)
-            else:
-                seg = (a,b)
-            block = segment_to_block.get(seg)
-            if block:
-                if route_manager.is_block_occupied(block):
-                    for s in segment_groups[block]:
-                        interface_manager.paint_segment(s, "red")
-                    continue
-            if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
-                interface_manager.paint_segment((a, b), "red")
-                continue
-            if route_manager.if_seg_in_counter_list(seg) and route_manager.get_segment_counter(seg) > 0:
-                interface_manager.paint_segment((a, b), "yellow")
-                continue
-            self.interface_manager.paint_segment((a, b), interface_manager.line_color_main)
-
-    def update_diagonals(self):
-        for diag_name, lines in diag_ids.items():
-            if diag_occ_train.get(diag_name, 1) == 0:
-                interface_manager.paint_diagonal(diag_name, "red")
-                continue
-            if self.route_manager.is_diagonal_occupied(diag_name):
-                interface_manager.paint_diagonal(diag_name, "yellow")
-                continue
-            interface_manager.paint_diagonal(diag_name, interface_manager.line_color_main)
-
-    prev_seg_state = {}
-
-    def update_routes(self):
-        for seg in seg_occ_train:
-            rev = (seg[1], seg[0])
-            current = seg_occ_train.get(seg, 1)
-            prev = self.prev_seg_state.get(seg, 1)
-
-            if prev == 1 and current == 0:
-                self.route_manager.check_if_route_finished(seg, rev, diag="")
-                if route_manager.if_seg_in_counter_list(seg):
-                    route_manager.minus_from_counter_segment(seg)
-                elif route_manager.if_seg_in_counter_list(rev):
-                    route_manager.minus_from_counter_segment(rev)
-
-                block = segment_to_block.get(seg)
-                if block:
-                    segs_in_block = segment_groups[block]
-                    for s in segs_in_block:
-                        rev = (s[1], s[0])
-                        if route_manager.if_seg_in_counter_list(s):
-                            route_manager.minus_from_counter_segment(s)
-                        elif route_manager.if_seg_in_counter_list(rev):
-                              route_manager.minus_from_counter_segment(rev)
-
-            self.prev_seg_state[seg] = current
-
-
-
 
     def update_all_occupancy(self):
-        """
+        for seg in seg_occ_train:
+            rev = (seg[1], seg[0])
+            if seg_occ_train.get(seg, 1) == 0:
+                # for i in range(route_manager.get_route_counter() + 1):
+                    # occupied_segments.discard((seg, i))
+                signal_segment = segment_to_signal.get(seg)
+                if signal_segment == None:
+                    signal_segment = segment_to_signal.get(rev)
+                if self.signal_manager.has_signal_in_states(signal_segment):
+                    for colors in self.signal_manager.get_lamp_colors(signal_segment):
+                        if colors == "red":
+                            self.signal_manager.set_signal(signal_segment, colors, onStatus=True, blink=False)
+
+                        elif colors == "blue":
+                            self.signal_manager.set_signal(signal_segment, colors, onStatus=True, blink=False)
+                        else:
+                            self.signal_manager.set_signal(signal_segment, colors, onStatus=False, blink=False)
+                # for i in range(route_manager.get_route_counter() + 1):
+                    # occupied_segments.discard((rev, i))
+                self.route_manager.check_if_route_finished(seg, rev, diag="")
+                block = segment_to_block.get(seg)
+                if block is None:
+                    continue
+                segs_in_block = segment_groups[block]
+                # for s in segs_in_block:
+                #     for i in range(route_manager.get_route_counter() + 1):
+                #         occupied_segments.discard((s, i))
+                #         occupied_segments.discard(((s[1], s[0]), i))
+
         for diag in diag_occ_train:
             if diag_occ_train.get(diag, 1) == 0:
                 signal_diag = diag_to_signal.get(diag)
@@ -602,74 +564,75 @@ class OccupancyManager:
 
                 # for i in range(route_manager.get_route_counter() + 1):
                     # occupied_diagonals.discard(((diag), i))
-                self.route_manager.check_if_route_finished_v2(seg="", rev="", diag=diag)
+                self.route_manager.check_if_route_finished(seg="", rev="", diag=diag)
+        for (a, b), seg_id in segment_ids.items():
+            seg = (a, b)
+            block = segment_to_block.get(seg)
+            rev = (b,a)
+            if block:
+                if any(seg_occ_train.get(s, 1) == 0 for s in segment_groups[block]):
+                    interface_manager.paint_segment(seg, "blue")
+                    continue
+                for s in segment_groups[block]:
+                    if any(s == seg for s, _ in occupied_segments):
+                        #if s in occupied_segments:
+                        interface_manager.paint_segment(seg, "yellow")
+                        continue
+                interface_manager.paint_segment(s, interface_manager.line_color_main)
 
-        """
-        self.update_routes()
-        self.update_segments()
-        self.update_diagonals()
+            if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
+                interface_manager.paint_segment((a, b), "red")
+                continue
+            if any(s == seg or s == rev for s, _ in occupied_segments):
+                interface_manager.paint_segment((a, b), "yellow")
+                continue
 
+            self.interface_manager.paint_segment((a, b), interface_manager.line_color_main)
 
+        for diag_name, lines in diag_ids.items():
+            if diag_occ_train.get(diag_name, 1) == 0:
+                interface_manager.paint_diagonal(diag_name, "red")
+                continue
+            if self.route_manager.is_diagonal_occupied(diag_name):
+                interface_manager.paint_diagonal(diag_name, "yellow")
+                continue
+            # 3) свободна -> чёрная
+            interface_manager.paint_diagonal(diag_name, interface_manager.line_color_main)
         self.root.after(100, self.update_all_occupancy)
 
 class RouteManager:
     current_mode = "maneuver"
-    active_routes = {}
     route_counter = 1
-    segments_active_counter = {
-        ("pastM1", "M1"): 0,
-        ("M8mid", "M8"): 0,
-        ("M8mid", "M1"): 0,
-        ("M8", "H1"): 0,
-        ("M2", "CH"): 0,
-        ("past2", "H2"): 0,
-        ("H2", "M6H2"): 0,
-        ("M6", "M6H2"): 0,
-        ("M2", "M2H1_mid"): 0,
-        ("M2H1_mid", "M2H1_third"): 0,
-        ("H1", "M2H1_third"): 0,
-        ("M10", "H3"): 0,
-        ("past4", "H4"): 0,
-        ("M6", "beforeM6"): 0,
-
-    }
     def __init__(self):
         self.route_counter = 1
+        self.active_routes = {}
         self.interface_manager = None
         self.switch_manager = None
-
-    def minus_from_counter_segment(self, segment):
-        if self.segments_active_counter[segment] > 0:
-            self.segments_active_counter[segment] -= 1
-
-
-    def get_segment_counter(self, seg):
-        return self.segments_active_counter[seg]
-
-    def is_block_occupied(self, block):
-        for s in segment_groups[block]:
-            if seg_occ_train.get(s, 1) == 0:
-                return True
-        return False
-
-    def if_seg_in_counter_list(self, seg):
-        if seg in self.segments_active_counter:
-            return True
-        else:
-            return False
-
+    """
     def check_if_route_finished(self, seg, rev, diag):
         for rid in list(self.active_routes.keys()):
-             data = self.active_routes[rid]
-             last_segment = data["segments"][-1]
-             block = segment_to_block.get(seg)
-             if seg == last_segment["id"] or rev == last_segment["id"]:
-                self.release_route(rid)
-             elif block:
-                 for s in segment_groups[block]:
-                     if s == last_segment["id"]:
-                         self.release_route(rid)
-
+            data = self.active_routes[rid]
+            segs = data["segments"]
+            all_segs = []
+            for steps in segs:
+                if steps.get("type") == "diag":
+                    all_segs.append(steps)
+                if steps.get("type") == "segment":
+                    all_segs.append(steps)
+            last_all = all_segs[-1]
+            if last_all.get("type") == "segment":
+                if seg == last_all["id"] or rev == last_all["id"]:
+                    self.release_route(rid)
+            if last_all.get("type") == "diag":
+                if last_all["name"] == diag:
+                    self.release_route(rid)
+            block = segment_to_block.get(seg)
+            if block:
+                for s in segment_groups[block]:
+                    if last_all.get("type") == "segment":
+                        if s == last_all["id"] or rev == last_all["id"]:
+                            self.release_route(rid)
+    """
     part_to_split = {}
 
     for split_name in split_parts_map:
@@ -809,15 +772,10 @@ class RouteManager:
             for step in routes.get((start, end)):
                 if step["type"] == "segment":
                     a, b = step["id"]
-                    if self.if_seg_in_counter_list((a,b)):
-                        self.segments_active_counter[(a,b)] +=1
-                    elif self.if_seg_in_counter_list((b,a)):
-                        self.segments_active_counter[(b, a)] += 1
                     occupied_segments.add(((a, b), rid))
                     occupied_segments.add(((b, a), rid))
                 elif step["type"] == "diag":
                     occupied_diagonals.add((step["name"], rid))
-
 
             self.active_routes[rid] = {
                 "start": start,
@@ -829,10 +787,6 @@ class RouteManager:
             for step in train_routes.get((start, end)):
                 if step["type"] == "segment":
                     a, b = step["id"]
-                    if self.if_seg_in_counter_list((a,b)):
-                        self.segments_active_counter[(a,b)] +=1
-                    else:
-                        self.segments_active_counter[(b, a)] += 1
                     occupied_segments.add(((a, b), rid))
                     occupied_segments.add(((b, a), rid))
                 elif step["type"] == "diag":
@@ -854,12 +808,6 @@ class RouteManager:
                 a, b = step["id"]
                 if any(seg == (a, b) and rid == route_id for seg, rid in occupied_segments):
                     interface_manager.paint_segment((a, b), interface_manager.line_color_main)
-                """
-                if self.if_seg_in_counter_list((a, b)):
-                    self.segments_active_counter[(a, b)] -= 1
-                elif self.if_seg_in_counter_list((b, a)):
-                    self.segments_active_counter[(b, a)] -= 1
-                """
                 occupied_segments.discard(((a, b), route_id))
                 occupied_segments.discard(((b, a), route_id))
             elif step["type"] == "diag":
@@ -869,6 +817,7 @@ class RouteManager:
         # recalc_signals_to_red(route_id)
         SignalManage.recalc_signals_to_red(route_id)
         del self.active_routes[route_id]
+
         self.interface_manager.comboboxDelete(route_id)
 
     def set_dependencies(self, interface_manager, switch_manager):
@@ -981,9 +930,9 @@ class SwitchManager:
         self.settingRoute = boolean_variable
 
 class interface_manager:
-    line_color_main = "white"
+    line_color_main = "black"
     def __init__(self):
-        self.line_color_main = "white"
+        self.line_color_main = "black"
         self.canvas = canvas
         self.node_ids = {}
         self.selected_nodes = []
@@ -1042,8 +991,8 @@ class interface_manager:
         for name, (x, y) in positions.items():
             if name in bannedNames:
                 continue
-            node = canvas.create_text(x, y - 28, text=name, tags=(f"node_{name}", "node"), fill=self.line_color_main,
-                                      font=("Bahnschrift SemiBold", 14))
+            node = canvas.create_text(x, y - 25, text=name, tags=(f"node_{name}", "node"), fill=self.line_color_main,
+                                      font=("Bahnschrift SemiBold", 12))
             self.node_ids[name] = node
 
     def showInfo(self, title, msg):
@@ -1067,6 +1016,8 @@ class interface_manager:
         if seg_id is None:
             return
         canvas.itemconfig(seg_id, fill=color)
+
+
 
 
     def drawDeadEnd(self, name, direction, offset):
@@ -1234,16 +1185,9 @@ class interface_manager:
         combobox1.set('')
 
     def check(self):
-        print("occupied segments:")
-        print(occupied_segments)
-        print("--------------")
         print("Активные маршруты")
-        print(self.route_manager.active_routes)
-        print("------------------")
-        print("список маршрутов с счётчиком:")
-        print(self.route_manager.segments_active_counter)
-
-
+        print(occupied_segments)
+        #print(self.route_manager.active_routes)
 
     def visualSwitch(self, key):
         list = [("M2", "H1"), ("M2", "M8"), ("M2", "M1"), ("H1", "M2"), ("M1", "M2")]
@@ -1292,10 +1236,10 @@ class interface_manager:
             main_diag = next(iter(route_cfg.keys()))
         self.switch_manager.set_settingRoute(True)
         self.paint_route(a, b, "cyan")
-        blink_route(a, b, duration_ms=2000, interval_ms=200)
+        blink_route(a, b, duration_ms=2000, interval_ms=150)
 
         if main_diag is not None:
-            blink_switches([main_diag], duration_ms=2000, interval_ms=200)
+            blink_switches([main_diag], duration_ms=2000, interval_ms=150)
         if changed:
             print("Изменены стрелки:")
             for line in changed:
@@ -1317,6 +1261,7 @@ class interface_manager:
             current_values = list(combobox1["values"])
             current_values.append(rid)
             combobox1["values"] = tuple(current_values)
+            # recalc_signals_from_active_routes((a,b))
             SignalManage.recalc_signals_from_active_routes((a, b))
 
         root.after(2100, finalize)
@@ -1336,7 +1281,7 @@ class interface_manager:
                 canvas.itemconfig(item_id, fill="yellow")
                 continue
             if name in possible:
-                canvas.itemconfig(item_id, fill="#4BFFA7")
+                canvas.itemconfig(item_id, fill="green")
                 canvas.itemconfig(item_id, state="normal")
             else:
                 canvas.itemconfig(item_id, fill="grey")
@@ -1608,9 +1553,9 @@ def create_switch_table():
 
     for i, name in enumerate(switch_list, start=1):
         y = y_start + (i - 1) * dy
-        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 13), tags=(f"switch_{name}", "switch"), fill="white" )
+        switch = canvas.create_text(x_text, y, text=f"{i}. {name}", anchor="w", font=("Bahnschrift SemiBold", 12), tags=(f"switch_{name}", "switch"), )
         switch_ids[name] = switch
-        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 14), fill="white")
+        label = canvas.create_text(x_rect-30, y+1, text="0", font=("Bahnschrift SemiBold", 12), )
 
         rect = canvas.create_rectangle(
             x_rect - 8, y - 8, x_rect + 8, y + 8,
@@ -1752,7 +1697,7 @@ def blink_route(start, end, duration_ms=2000, interval_ms=200):
             interface_manager.paint_route(start, end, interface_manager.line_color_main)
             return
 
-        color = "#75CEFF" if state else interface_manager.line_color_main
+        color = "#4c86a6" if state else interface_manager.line_color_main
         interface_manager.paint_route(start, end, color)
         root.after(interval_ms, _step, not state)
     _step(True)
@@ -1773,7 +1718,7 @@ def blink_diag(name, duration_ms=2000, interval_ms=200):
                 interface_manager.paint_diagonal(name, interface_manager.line_color_main)
             return
 
-        color = "#75CEFF" if state else interface_manager.line_color_main
+        color = "#4c86a6" if state else interface_manager.line_color_main
         if name == "ALB_Turn4-6":
             interface_manager.paint_diagonal("ALB_Turn4", color)
             interface_manager.paint_diagonal("ALB_Turn6", color)
@@ -1910,18 +1855,18 @@ for i in range(18):
 ######################################### ЗАПУСК ЦИКЛОВ ##############################################
 init_arduino()
 poll_arduino()
-occupancy_manager = OccupancyManager(canvas, root)
-SignalManage = SignalManager(canvas, root)
+occupancy_manager = OccupancyManager(canvas, root, SignalManager, RouteManager)
+SignalManage = SignalManager(canvas, root, RouteManager)
+
 SignalManage.initialize_signals()
 SignalManage.bind_invite_button()
 route_manager = RouteManager()
-SignalManage.set_dependencies(route_manager)
 switch_manager = SwitchManager()
 interface_manager = interface_manager()
 switch_manager.set_dependencies(route_manager, interface_manager)
 route_manager.set_dependencies(interface_manager, switch_manager)
 interface_manager.set_dependencies(route_manager, switch_manager)
-occupancy_manager.set_dependencies(interface_manager, route_manager, SignalManage)
+occupancy_manager.set_dependencies(interface_manager)
 occupancy_manager.update_all_occupancy()
 switch_manager.initialize_switches()
 root.protocol('WM_DELETE_WINDOW', quit_function)

@@ -198,27 +198,9 @@ signals_config_simple = {
     "M1": {
         "mount": "top",
         "pack_side": "left",
-        "count": 1,
-        "colors": ["grey", "white"],
+        "count": 2,
+        "colors": ["grey", "grey"],
     },
-    # "ALB_Sect1-2": {
-    #     "mount": "top",
-    #     "pack_side": "left",
-    #     "count": 3,
-    #     "colors": ["yellow", "green", "red"],
-    # },
-    # "ALB_Sect1-2_2": {
-    #     "mount": "bottom",
-    #     "pack_side": "right",
-    #     "count": 3,
-    #     "colors": ["yellow", "green", "red"],
-    # },
-    # "ALB_Sect2": {
-    #     "mount": "top",
-    #     "pack_side": "left",
-    #     "count": 5,
-    #     "colors": ["yellow", "green", "red", "black", "white"],
-    # }
 }
 
 signals_config = {

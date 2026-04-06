@@ -23,6 +23,7 @@ def quit_function():
         exit()
 
 
+
 CANVAS_W = 1200
 CANVAS_H = 600
 root.resizable(False, False)
@@ -299,29 +300,6 @@ def invite_signal_on_off(signalName):
     elif signalName in signals_state and signals_state[signalName]["lamps"]["white"]["on"] == False:
         signals_state[signalName]["lamps"]["white"]["on"] = True
 
-
-def is_signal_used_by_other_routes(signal_name, exclude_rid):
-    for other_rid, data in active_routes.items():
-        if other_rid == exclude_rid:
-            continue
-        for data_in_segment in active_routes[other_rid]["segments"]:
-            if data_in_segment['type'] == 'segment':
-                segment = data_in_segment['id']
-                if any(segment == seg for seg in segment_to_signal):
-                    signal_cfg = segment_to_signal[segment]
-                    if signal_name == signal_cfg:
-                        return True
-            elif data_in_segment['type'] == 'diag':
-                diag = data_in_segment['name']
-                if any(diag == diagonal for diagonal in diag_to_signal):
-                    diag_cfg = diag_to_signal[diag]
-                    if signal_name == diag_cfg:
-                        return True
-    return False
-
-
-
-
 def recalc_signals_to_red(rid) -> None:
     AdditionalSignals = ["ALB_Sect1-2", "ALB_Sect1-2_2", "ALB_Sect2"]
     # включаем красный по умолчанию
@@ -330,25 +308,25 @@ def recalc_signals_to_red(rid) -> None:
         a = data.get("start")
         b = data.get("end")
         key = (a, b)
-        print(key)
+       # if key not in ROUTE_SIGNAL_MAP and (b, a) in ROUTE_SIGNAL_MAP:
+            #print("Нет маршрута")
+            #return
         cfg = ROUTE_SIGNAL_MAP.get(key)
         for name in cfg:
-                if name in AdditionalSignals:
+            if name in AdditionalSignals:
+                continue
+            for lamp_name, lamp in signals_state[name]["lamps"].items():
+                if lamp_name == "white" and name == "CH":
                     continue
-                if is_signal_used_by_other_routes(name, rid):
-                    continue
-                for lamp_name, lamp in signals_state[name]["lamps"].items():
-                    if lamp_name == "white" and name == "CH":
-                        continue
-                    lamp["on"] = False
-                    lamp["blink"] = False
-                if "red" in signals_state[name]["lamps"]:
-                    signals_state[name]["lamps"]["red"]["on"] = True
-                elif "blue" in signals_state[name]["lamps"]:
-                    signals_state[name]["lamps"]["blue"]["on"] = True
-                else:
-                    for colors in signals_state[name]["lamps"]:
-                        signals_state[name]["lamps"][colors]["on"] = False
+                lamp["on"] = False
+                lamp["blink"] = False
+            if "red" in signals_state[name]["lamps"]:
+                signals_state[name]["lamps"]["red"]["on"] = True
+            elif "blue" in signals_state[name]["lamps"]:
+                signals_state[name]["lamps"]["blue"]["on"] = True
+            else:
+                for colors in signals_state[name]["lamps"]:
+                    signals_state[name]["lamps"][colors]["on"] = False
     else:
         for name in signals_state.keys():
             if name in AdditionalSignals:
@@ -365,6 +343,7 @@ def recalc_signals_to_red(rid) -> None:
                     if colors == "white":
                         continue
                     signals_state[name]["lamps"][colors]["on"] = False
+
 def recalc_signals_from_active_routes(route):
     """
        # 2) применить активные маршруты
@@ -545,6 +524,7 @@ def paint_route(start, end, color="yellow"):
         for step in routes[key]:
             if step["type"] == "segment":
                 paint_segment(step["id"], color)
+
             elif step["type"] == "diag":
                 paint_diagonal(step["name"], color)
             else:
@@ -843,22 +823,12 @@ for split_name in split_parts_map:
     for part, logic_name in split_parts_map[split_name].items():
         part_to_split[logic_name] = (split_name, part)
 
-def is_segment_occupied(seg):
-    a, b = seg
-    rev = (b, a)
-    return any(s == seg or s == rev for s, _ in occupied_segments)
-
-def is_diagonal_occupied(name):
-    return any(d == name for d, _ in occupied_diagonals)
-
-
 def update_all_occupancy():
-    global route_counter
     for seg in seg_occ_train:
         rev = (seg[1], seg[0])
         if seg_occ_train.get(seg, 1) == 0:
-            for i in range(route_counter + 1):
-                occupied_segments.discard((seg, i))
+
+            occupied_segments.discard(seg)
             signal_segment = segment_to_signal.get(seg)
             if signal_segment == None:
                 signal_segment = segment_to_signal.get(rev)
@@ -870,18 +840,15 @@ def update_all_occupancy():
                         signals_state[signal_segment]["lamps"][colors]["on"] = True
                     else:
                         signals_state[signal_segment]["lamps"][colors]["on"] = False
-            for i in range(route_counter + 1):
-                occupied_segments.discard((rev, i))
+            occupied_segments.discard(rev)
             check_if_route_finished(seg, rev, diag="")
             block = segment_to_block.get(seg)
             if block is None:
                 continue
             segs_in_block = segment_groups[block]
             for s in segs_in_block:
-                for i in range(route_counter + 1):
-                    occupied_segments.discard((s,i))
-                    occupied_segments.discard(((s[1], s[0]),i))
-
+                occupied_segments.discard(s)
+                occupied_segments.discard((s[1], s[0]))
     for diag in diag_occ_train:
         if diag_occ_train.get(diag, 1) == 0:
             signal_diag = diag_to_signal.get(diag)
@@ -893,8 +860,8 @@ def update_all_occupancy():
                         signals_state[signal_diag]["lamps"][colors]["on"] = True
                     else:
                         signals_state[signal_diag]["lamps"][colors]["on"] = False
-            for i in range(route_counter + 1):
-                occupied_diagonals.discard(((diag) , i))
+
+            occupied_diagonals.discard(diag)
             check_if_route_finished(seg="", rev="", diag=diag)
     for (a, b), seg_id in segment_ids.items():
         seg = (a, b)
@@ -906,8 +873,7 @@ def update_all_occupancy():
                 paint_segment(seg, "red")
                 continue
             for s in segment_groups[block]:
-                if any(s == seg for s, _ in occupied_segments):
-                #if s in occupied_segments:
+                if s in occupied_segments:
                     paint_segment(seg, "yellow")
                     continue
             paint_segment(s, line_color_main)
@@ -915,8 +881,8 @@ def update_all_occupancy():
         if seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0 :
             paint_segment((a,b), "red")
             continue
-        if any(s == seg or s == rev for s, _ in occupied_segments):
-            paint_segment((a, b), "yellow")
+        if (a, b) in occupied_segments or (b, a) in occupied_segments:
+            paint_segment((a,b), "yellow")
             continue
 
         paint_segment((a, b), line_color_main)
@@ -925,7 +891,7 @@ def update_all_occupancy():
         if diag_occ_train.get(diag_name, 1) == 0:
             paint_diagonal(diag_name, "red")
             continue
-        if is_diagonal_occupied(diag_name):
+        if diag_name in occupied_diagonals:
             paint_diagonal(diag_name, "yellow")
             continue
         # 3) свободна -> чёрная
@@ -1083,18 +1049,16 @@ def has_switch_conflict(a, b):
     return False
 
 def check_route_conflict(start, end):
-    global route_counter
     if current_mode == "maneuver":
         if has_switch_conflict(start, end):
             return True
         for step in routes.get((start,end)):
             if step["type"] == "segment":
                 a, b = step["id"]
-                seg = (a,b)
-                if is_segment_occupied(seg) or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
+                if step["id"] in occupied_segments or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
                     return True
             elif step["type"] == "diag":
-                if is_diagonal_occupied(step["name"]) or diag_occ_train.get(step["name"],1) == 0:
+                if step["name"] in occupied_diagonals or diag_occ_train.get(step["name"],1) == 0:
                     return True
         return False
     if current_mode == "train":
@@ -1103,15 +1067,15 @@ def check_route_conflict(start, end):
         for step in train_routes.get((start,end)):
             if step["type"] == "segment":
                 a, b = step["id"]
-                seg = (a, b)
-                if is_segment_occupied(seg) or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
+                if step["id"] in occupied_segments or seg_occ_train.get((a, b), 1) == 0 or seg_occ_train.get((b, a), 1) == 0:
                     return True
             elif step["type"] == "diag":
-                if is_diagonal_occupied(step["name"]) or diag_occ_train.get(step["name"],1) == 0:
+                if step["name"] in occupied_diagonals or diag_occ_train.get(step["name"],1) == 0:
                     return True
         return False
 
 def register_route(start, end):
+
     global route_counter
     rid = route_counter
     route_counter += 1
@@ -1119,10 +1083,10 @@ def register_route(start, end):
         for step in routes.get((start,end)):
             if step["type"] == "segment":
                 a, b = step["id"]
-                occupied_segments.add(((a,b), rid))
-                occupied_segments.add(((b,a), rid))
+                occupied_segments.add((a,b))
+                occupied_segments.add((b,a))
             elif step["type"] == "diag":
-                occupied_diagonals.add((step["name"], rid))
+                occupied_diagonals.add(step["name"])
 
         active_routes[rid] = {
             "start": start,
@@ -1154,14 +1118,13 @@ def release_route(route_id):
     for step in data["segments"]:
         if step["type"] == "segment":
             a, b = step["id"]
-            if any(seg == (a,b) and rid == route_id for seg, rid in occupied_segments):
-                paint_segment((a, b), line_color_main)
-            occupied_segments.discard(((a,b), route_id))
-            occupied_segments.discard(((b, a), route_id))
+            paint_segment((a,b), line_color_main)
+
+            occupied_segments.discard((a,b))
+            occupied_segments.discard((b, a))
         elif step["type"] == "diag":
-            if any(diag == step["name"] and rid == route_id for diag, rid in occupied_diagonals):
-                paint_diagonal(step["name"], line_color_main)
-            occupied_diagonals.discard((step["name"], route_id))
+            paint_diagonal(step["name"], line_color_main)
+            occupied_diagonals.discard(step["name"])
     recalc_signals_to_red(route_id)
     del active_routes[route_id]
 
@@ -1430,10 +1393,6 @@ def check():
     print("Активные маршруты")
     print(active_routes)
 
-def checkOccupied():
-    print(occupied_segments)
-
-
 def init_arduino():
    # Поиск порта и подключение к Arduino.
     
@@ -1614,8 +1573,6 @@ buttonAll = tkinter.Button(root, text="Убрать всё", command=snosAll, re
 buttonAll.place(x=790, y=18)
 button = tkinter.Button(root, text="Проверка", command=check, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
 button.place(x=880, y=18)
-button = tkinter.Button(root, text="Проверка occupied", command=checkOccupied, relief="flat", bg="#D50063", fg="white", font=("Bahnschrift", 10))
-button.place(x=880, y=40)
 
 buttons_y = CANVAS_H - 80
 
